@@ -1,0 +1,36 @@
+@page "/forms/{Key}"
+@layout MobileShellLayout
+@inject NavigationManager Nav
+
+<div class="me-page">
+    <div class="mh-section-head">
+        <div class="me-head-row">
+            <div class="mh-section-title"><h2>@(Item?.Code ?? "Form")</h2></div>
+            <a class="me-refresh" href="/forms">Back</a>
+        </div>
+    </div>
+    @if (Item is null)
+    {
+        <div class="me-card"><p class="me-empty">This form is not in the menu.</p></div>
+    }
+    else
+    {
+        <div class="me-card">
+            <h3>@Item.Title</h3>
+            <p class="me-status">Example table: @Item.Table</p>
+            <p class="me-status">Screen content follows.</p>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Key { get; set; } = "";
+
+    private FormMenuItem? Item => FormCatalog.Find(Key);
+
+    protected override void OnParametersSet()
+    {
+        if (Key.Equals("mobile-01", StringComparison.OrdinalIgnoreCase))
+            Nav.NavigateTo("/work-notices", replace: true);
+    }
+}

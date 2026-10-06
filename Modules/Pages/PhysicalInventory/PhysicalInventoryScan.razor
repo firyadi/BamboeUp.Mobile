@@ -1,0 +1,178 @@
+@page "/physical-inventory/{CaptureGuid}"
+@layout MobileShellLayout
+@using BamboeUp.Mobile.Shell.Device
+@using BamboeUp.Mobile.Shell.Offline
+@using BamboeUp.Mobile.Shell.Services
+@using Shared.DataTransferObjects
+@inject IPhysicalInventoryLocalStore Store
+@inject IDeviceServices Device
+@inject NavigationManager Nav
+@implements IDisposable
+
+<div class="me-page">
+    @if (_header is null)
+    {
+        <p class="me-status">@(_error ?? "Loading...")</p>
+    }
+    else
+    {
+        <div class="mh-section-head">
+            <div class="mh-section-title"><h2>@_header.DocumentNumber</h2></div>
+            <p class="mh-section-sub">Page @_header.PageNumber · Stock Opname</p>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <p class="me-warn">@_error</p>
+        }
+        @if (!string.IsNullOrWhiteSpace(_info))
+        {
+            <p class="me-ok">@_info</p>
+        }
+
+        <div class="me-card">
+            <label class="ml-label">Barcode</label>
+            <input class="ml-input" @bind="_barcode" placeholder="Scan or type barcode" />
+            <label class="ml-label">Quantity</label>
+            <input class="ml-input" type="number" min="0.0001" step="0.0001" @bind="_quantity" />
+            <div class="me-head-actions">
+                <button type="button" class="me-refresh" @onclick="ScanAsync" disabled="@_busy">Scan camera</button>
+                <button type="button" class="me-save" @onclick="SaveItemAsync" disabled="@_busy">Save Item</button>
+            </div>
+        </div>
+
+        <div class="me-list">
+            @foreach (var line in _lines)
+            {
+                <div class="me-card">
+                    <h3>@line.Barcode</h3>
+                    <p class="me-status">Qty @line.Quantity · @line.ScanCount scan(s) · @line.Source</p>
+                    <input class="ml-input" type="number" min="0.0001" step="0.0001" value="@line.Quantity"
+                           @onchange="e => EditQtyAsync(line.LineGuid, e.Value?.ToString())" />
+                </div>
+            }
+        </div>
+
+        @if (_lines.Count == 0)
+        {
+            <div class="me-card"><p class="me-empty">No barcodes yet. Save Item stores the line immediately.</p></div>
+        }
+
+        <button type="button" class="me-save" @onclick="FinishAsync" disabled="@_busy">Finish Page</button>
+    }
+</div>
+
+@code {
+    [Parameter] public string CaptureGuid { get; set; } = string.Empty;
+
+    private LocalInventoryCount? _header;
+    private List<LocalInventoryCountLine> _lines = [];
+    private string _barcode = string.Empty;
+    private decimal _quantity = 1;
+    private string _source = "Manual";
+    private bool _busy;
+    private string? _error;
+    private string? _info;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        Store.Changed += OnChanged;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _header = await Store.GetAsync(CaptureGuid);
+        _lines = [.. await Store.GetLinesAsync(CaptureGuid)];
+        if (_header is null)
+            _error = "The count session was not found.";
+    }
+
+    private async Task ScanAsync()
+    {
+        _error = null;
+        _info = null;
+        _busy = true;
+        try
+        {
+            var code = await Device.ScanBarcodeAsync();
+            if (string.IsNullOrWhiteSpace(code))
+            {
+                _error = "No barcode could be read. Type it manually.";
+                return;
+            }
+            _barcode = code;
+            _source = "Camera";
+            _info = "Barcode captured from camera.";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task SaveItemAsync()
+    {
+        _error = null;
+        _info = null;
+        _busy = true;
+        try
+        {
+            await Store.SaveItemAsync(CaptureGuid, _barcode, _quantity, _source);
+            _barcode = string.Empty;
+            _quantity = 1;
+            _source = "Manual";
+            _info = "Item saved.";
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task EditQtyAsync(string lineGuid, string? raw)
+    {
+        if (!decimal.TryParse(raw, out var qty))
+            return;
+        try
+        {
+            await Store.UpdateLineQuantityAsync(lineGuid, qty);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task FinishAsync()
+    {
+        _error = null;
+        _busy = true;
+        try
+        {
+            await Store.FinishPageAsync(CaptureGuid);
+            Nav.NavigateTo("/physical-inventory/sync");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void OnChanged() => _ = InvokeAsync(LoadAsync);
+    public void Dispose() => Store.Changed -= OnChanged;
+}

@@ -1,0 +1,65 @@
+@page "/physical-inventory/new"
+@layout MobileShellLayout
+@using BamboeUp.Mobile.Shell.Device
+@using BamboeUp.Mobile.Shell.Offline
+@using BamboeUp.Mobile.Shell.Services
+@using Shared.DataTransferObjects
+@inject MobileAuthService Auth
+@inject IPhysicalInventoryLocalStore Store
+@inject IDeviceServices Device
+@inject NavigationManager Nav
+
+<div class="me-page">
+    <div class="mh-section-head">
+        <div class="mh-section-title"><h2>New Physical Inventory Count</h2></div>
+        <p class="mh-section-sub">Stock Opname — header only. Counter comes from the offline permit.</p>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <p class="me-warn">@_error</p>
+    }
+
+    <div class="me-card">
+        <label class="ml-label">Stock Count Document Number</label>
+        <input class="ml-input" @bind="_documentNumber" placeholder="Document number" />
+        <label class="ml-label">Page Number</label>
+        <input class="ml-input" type="number" min="1" @bind="_pageNumber" />
+        <p class="me-status">Counter: @(Auth.CurrentUser?.FullName ?? Auth.CurrentUser?.UserName)</p>
+        <button type="button" class="me-save" @onclick="CreateAsync" disabled="@_busy">Start Count</button>
+    </div>
+</div>
+
+@code {
+    private string _documentNumber = string.Empty;
+    private int _pageNumber = 1;
+    private bool _busy;
+    private string? _error;
+
+    private async Task CreateAsync()
+    {
+        _error = null;
+        if (!PhysicalInventoryLocalRules.TryValidateHeader(_documentNumber, _pageNumber, out var error))
+        {
+            _error = error;
+            return;
+        }
+
+        _busy = true;
+        try
+        {
+            var user = Auth.CurrentUser ?? throw new InvalidOperationException("Sign in first.");
+            var device = await Device.GetDeviceGuidAsync();
+            var created = await Store.CreateCountAsync(_documentNumber, _pageNumber, user.UserGuid, device);
+            Nav.NavigateTo($"/physical-inventory/{created.CaptureGuid}");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

@@ -1,0 +1,173 @@
+@page "/"
+@layout BamboeUp.Mobile.Components.Layout.MobileShellLayout
+@using BamboeUp.Mobile.Shell.Services
+@inject MobileAuthService Auth
+@inject NavigationManager Nav
+@implements IDisposable
+
+@if (!Auth.CanEnterApp)
+{
+    <div class="auth-gate">
+        <p>Please sign in to open the home screen.</p>
+        <a class="btn-primary" href="/login">Login</a>
+    </div>
+}
+else
+{
+    <div class="mh-home">
+        <section class="mh-section">
+            <div class="mh-section-head">
+                <div class="mh-section-title">
+                    <span class="mh-section-ico" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">
+                            <rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+                        </svg>
+                    </span>
+                    <h2>Work Essentials</h2>
+                </div>
+                <p class="mh-section-sub">Manage your daily work</p>
+            </div>
+            <div class="mh-grid mh-grid-3">
+                @foreach (var item in WorkEssentials)
+                {
+                    <button type="button" class="mh-tile" @onclick="() => OpenTile(item.Href)">
+                        <span class="mh-tile-ico @item.Tone" aria-hidden="true">@((MarkupString)item.IconSvg)</span>
+                        <span class="mh-tile-title">@item.Title</span>
+                        <span class="mh-tile-sub">@item.Subtitle</span>
+                    </button>
+                }
+            </div>
+        </section>
+
+        <section class="mh-section">
+            <div class="mh-section-head">
+                <div class="mh-section-title">
+                    <span class="mh-section-ico" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">
+                            <path d="M8 6h12M8 12h12M8 18h12"/><circle cx="4" cy="6" r="1.2" fill="currentColor"/><circle cx="4" cy="12" r="1.2" fill="currentColor"/><circle cx="4" cy="18" r="1.2" fill="currentColor"/>
+                        </svg>
+                    </span>
+                    <h2>My Activities</h2>
+                </div>
+                <p class="mh-section-sub">Track and manage your activities</p>
+            </div>
+            <div class="mh-grid mh-grid-4">
+                @foreach (var item in MyActivities)
+                {
+                    <button type="button" class="mh-tile mh-tile-sm" @onclick="() => OpenTile(item.Href)">
+                        <span class="mh-tile-ico @item.Tone" aria-hidden="true">@((MarkupString)item.IconSvg)</span>
+                        <span class="mh-tile-title">@item.Title</span>
+                        <span class="mh-tile-sub">@item.Subtitle</span>
+                    </button>
+                }
+            </div>
+        </section>
+
+        <section class="mh-section">
+            <div class="mh-section-head">
+                <div class="mh-section-title">
+                    <span class="mh-section-ico" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">
+                            <circle cx="12" cy="12" r="9"/><path d="M12 10v6"/><circle cx="12" cy="7.5" r="1" fill="currentColor"/>
+                        </svg>
+                    </span>
+                    <h2>Information &amp; Support</h2>
+                </div>
+                <p class="mh-section-sub">Information and help</p>
+            </div>
+            <div class="mh-grid mh-grid-4">
+                @foreach (var item in InfoSupport)
+                {
+                    <button type="button" class="mh-tile mh-tile-sm" @onclick="() => OpenTile(item.Href)">
+                        <span class="mh-tile-ico @item.Tone" aria-hidden="true">@((MarkupString)item.IconSvg)</span>
+                        <span class="mh-tile-title">@item.Title</span>
+                        <span class="mh-tile-sub">@item.Subtitle</span>
+                    </button>
+                }
+            </div>
+        </section>
+
+        <button type="button" class="mh-banner" @onclick='() => Nav.NavigateTo("/modules")'>
+            <span class="mh-banner-bolt" aria-hidden="true">
+                <span class="mh-spark s1"></span>
+                <span class="mh-spark s2"></span>
+                <span class="mh-spark s3"></span>
+                <span class="mh-spark s4"></span>
+                <span class="mh-bolt-circle">
+                    <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                        <path d="M13 2 4 14h7l-1 8 10-14h-7l0-6z"/>
+                    </svg>
+                </span>
+            </span>
+            <span class="mh-banner-copy">
+                <span class="mh-banner-title">Stay Productive!</span>
+                <span class="mh-banner-sub">Stay focused and finish your best work today.</span>
+            </span>
+            <span class="mh-banner-arrow" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M5 12h14M13 6l6 6-6 6"/>
+                </svg>
+            </span>
+        </button>
+    </div>
+}
+
+@code {
+    private sealed record HomeTile(string Title, string Subtitle, string Tone, string IconSvg, string Href);
+
+    private static readonly HomeTile[] WorkEssentials =
+    [
+        new("Attendance", "Check in and check out", "tone-gold",
+            """<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 11a3 3 0 1 0-3-3"/><path d="M12 14a6 6 0 0 0-6 6"/><path d="M12 3v2M7 5.5 8.2 7M17 5.5 15.8 7"/><path d="M12 11c2.5 0 4.5 1.2 5.5 3"/></svg>""",
+            "/attendances"),
+        new("Leave", "Request leave", "tone-orange",
+            """<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/><path d="m9 15 2 2 4-4"/></svg>""",
+            "/modules"),
+        new("Overtime Request", "Request overtime", "tone-gold",
+            """<svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/><path d="M19 5a10 10 0 0 1 1.5 3"/></svg>""",
+            "/overtime-requests")
+    ];
+
+    private static readonly HomeTile[] MyActivities =
+    [
+        new("My Schedule", "Work schedule", "tone-gold",
+            """<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16M8 14h4M8 17h8"/></svg>""",
+            "/modules"),
+        new("Task", "Task list", "tone-orange",
+            """<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M9 5H7a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2h-2"/><rect x="9" y="3" width="6" height="4" rx="1"/><path d="m9 13 2 2 4-4"/></svg>""",
+            "/modules"),
+        new("Timesheet", "Time records", "tone-gold",
+            """<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l2.5 1.5"/></svg>""",
+            "/modules"),
+        new("Form", "Standard forms", "tone-orange",
+            """<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M6 3h9l3 3v15a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M15 3v4h4"/><path d="M8 12h8M8 16h5"/></svg>""",
+            "/forms"),
+        new("Physical Inventory Count", "Stock Opname offline", "tone-gold",
+            """<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 12h8M8 15h5"/></svg>""",
+            "/physical-inventory")
+    ];
+
+    private static readonly HomeTile[] InfoSupport =
+    [
+        new("Announcement", "Announcements", "tone-orange",
+            """<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 10v4h3l6 4V6L7 10H4z"/><path d="M17 9a4 4 0 0 1 0 6"/></svg>""",
+            "/notifications"),
+        new("Document", "Important documents", "tone-gold",
+            """<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V7z"/></svg>""",
+            "/modules"),
+        new("Helpdesk", "Need help?", "tone-orange",
+            """<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 13v-1a8 8 0 1 1 16 0v1"/><rect x="3" y="13" width="4" height="6" rx="1"/><rect x="17" y="13" width="4" height="6" rx="1"/><path d="M17 18h1a3 3 0 0 1 0 6"/></svg>""",
+            "/modules"),
+        new("FAQ", "Common questions", "tone-gold",
+            """<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.8.4-1.5 1-1.5 2.2"/><circle cx="12" cy="17" r="0.9" fill="currentColor" stroke="none"/></svg>""",
+            "/modules")
+    ];
+
+    private void OpenTile(string href) => Nav.NavigateTo(href);
+
+    protected override void OnInitialized() => Auth.AuthStateChanged += OnAuth;
+
+    private void OnAuth() => InvokeAsync(StateHasChanged);
+
+    public void Dispose() => Auth.AuthStateChanged -= OnAuth;
+}

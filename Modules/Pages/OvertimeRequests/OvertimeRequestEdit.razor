@@ -1,0 +1,367 @@
+@page "/overtime-requests/new"
+@page "/overtime-requests/{Id:guid}"
+@page "/overtime-requests/{Id:guid}/edit"
+@layout MobileShellLayout
+@using Microsoft.AspNetCore.Components.Forms
+@using BamboeUp.Mobile.Modules.Services
+@using BamboeUp.Mobile.Shell.Services
+@using Shared.DataTransferObjects
+@inject OvertimeRequestApi Api
+@inject MobileAuthService Auth
+@inject MobilePermissionService Rights
+@inject NavigationManager Nav
+
+<div class="ot-page">
+    <div class="mh-section-head">
+        <div class="ot-head-row">
+            <div class="mh-section-title">
+                <span class="mh-section-ico" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>
+                    </svg>
+                </span>
+                <h2>@PageTitle</h2>
+            </div>
+            <button type="button" class="ot-refresh" @onclick="Back">Back</button>
+        </div>
+        <p class="mh-section-sub">@(_requestNo)</p>
+    </div>
+
+    @if (_loading)
+    {
+        <p class="ot-status">Loading...</p>
+    }
+    else if (_missing)
+    {
+        <div class="ot-card">
+            <p class="ot-empty">@(string.IsNullOrWhiteSpace(_message) ? "Request not found." : _message)</p>
+        </div>
+    }
+    else
+    {
+        <EditForm Model="_form" OnValidSubmit="SaveAsync" class="ot-form">
+            @if (_editing)
+            {
+                <div class="ot-field">
+                    <label for="ot-no">Request No</label>
+                    <input id="ot-no" @bind="_form.RequestNo" maxlength="50" />
+                </div>
+                <div class="ot-field">
+                    <label for="ot-req">Request Date</label>
+                    <input id="ot-req" type="date" @bind="_form.RequestDate" />
+                </div>
+                <div class="ot-field">
+                    <label for="ot-ot">Overtime Date</label>
+                    <input id="ot-ot" type="date" @bind="_form.OvertimeDate" />
+                </div>
+                <div class="ot-field">
+                    <label for="ot-reason">Reason</label>
+                    <textarea id="ot-reason" @bind="_form.Reason" rows="3"></textarea>
+                </div>
+                <div class="ot-time-row">
+                    <div class="ot-field">
+                        <label for="ot-start">Planned Start</label>
+                        <input id="ot-start" type="time" @bind="StartClock" />
+                    </div>
+                    <div class="ot-field">
+                        <label for="ot-end">Planned End</label>
+                        <input id="ot-end" type="time" @bind="EndClock" />
+                    </div>
+                </div>
+                @if (!string.IsNullOrWhiteSpace(_message))
+                {
+                    <p class="@(_saved ? "ot-ok" : "ot-status ot-warn")">@_message</p>
+                }
+                <button type="submit" class="mg-primary" disabled="@_saving">@(_saving ? "Saving..." : "Save")</button>
+            }
+            else
+            {
+                <article class="mg-row">
+                    <span class="mg-ico" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7">
+                            <circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>
+                        </svg>
+                    </span>
+                    <span class="mg-copy">
+                        <span class="mg-title">@(string.IsNullOrWhiteSpace(_form.RequestNo) ? "Overtime Request" : _form.RequestNo)</span>
+                        <span class="mg-sub">@_form.OvertimeDate.ToString("dd MMM yyyy"). @_form.PlannedStart.ToString(@"hh\:mm") – @_form.PlannedEnd.ToString(@"hh\:mm"). @_form.Reason</span>
+                    </span>
+                </article>
+                @if (!string.IsNullOrWhiteSpace(_message))
+                {
+                    <p class="ot-status ot-warn">@_message</p>
+                }
+            }
+        </EditForm>
+        @if (!_editing && _rights.CanEdit)
+        {
+            <button type="button" class="mg-primary" @onclick="GoEdit">Edit</button>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private OvertimeRequestDto? _source;
+    private EditModel _form = new();
+    private MobilePageRight _rights = MobilePageRight.Denied;
+    private bool _isNew;
+    private bool _editing;
+    private Guid _loadedId;
+    private bool _ready;
+    private bool _loading = true;
+    private bool _missing;
+    private bool _saving;
+    private bool _saved;
+    private string? _message;
+    private string _requestNo = "Request overtime";
+    private string PageTitle => _isNew ? "New Overtime" : _editing ? "Edit Overtime" : "Overtime";
+
+    private TimeOnly StartClock
+    {
+        get => TimeOnly.FromTimeSpan(_form.PlannedStart);
+        set => _form.PlannedStart = value.ToTimeSpan();
+    }
+
+    private TimeOnly EndClock
+    {
+        get => TimeOnly.FromTimeSpan(_form.PlannedEnd);
+        set => _form.PlannedEnd = value.ToTimeSpan();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var isNew = IsNewRoute();
+        var editing = isNew || IsEditRoute();
+        if (_ready && _isNew == isNew && _editing == editing && (isNew || _loadedId == Id))
+            return;
+
+        _rights = await Rights.GetAsync("80.02");
+        if (!isNew && IsEditRoute() && !_rights.CanEdit)
+        {
+            Nav.NavigateTo($"/overtime-requests/{Id}", replace: true);
+            return;
+        }
+
+        _isNew = isNew;
+        _editing = isNew ? _rights.CanAdd : editing && _rights.CanEdit;
+        _loadedId = Id;
+        _ready = true;
+        if (isNew && !_rights.CanAdd)
+        {
+            _loading = false;
+            _missing = true;
+            _message = "You cannot add an overtime request.";
+            return;
+        }
+
+        await LoadAsync();
+    }
+
+    private bool IsNewRoute()
+    {
+        var path = CurrentPath();
+        return path.Equals("overtime-requests/new", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private bool IsEditRoute() =>
+        CurrentPath().EndsWith("/edit", StringComparison.OrdinalIgnoreCase);
+
+    private string CurrentPath() =>
+        Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0].Trim('/');
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _missing = false;
+        _message = null;
+        _saved = false;
+        try
+        {
+            if (_isNew)
+            {
+                _source = null;
+                _requestNo = "Request overtime";
+                _form = EditModel.CreateNew();
+            }
+            else
+            {
+                _source = await Api.GetByIdAsync(Id);
+                if (_source is null)
+                {
+                    _missing = true;
+                    return;
+                }
+
+                _requestNo = string.IsNullOrWhiteSpace(_source.RequestNo) ? "No number" : _source.RequestNo;
+                var companyId = Auth.CurrentUser?.ActiveCompanyId ?? 0;
+                var officeId = Auth.CurrentUser?.ActiveOfficeId ?? 0;
+                var personId = Auth.CurrentUser?.PersonId ?? 0;
+                if (companyId <= 0 || officeId <= 0 || personId <= 0
+                    || _source.CompanyId != companyId
+                    || _source.CompanyOfficeId != officeId
+                    || _source.PersonId != personId)
+                {
+                    _source = null;
+                    _missing = true;
+                    _message = companyId <= 0 || officeId <= 0 || personId <= 0
+                        ? "Sign in again so company, office, and person are stored in this session."
+                        : "This request is not for your signed-in company, office, and person.";
+                    return;
+                }
+
+                _form = EditModel.From(_source);
+            }
+
+        }
+        catch (Exception ex)
+        {
+            _message = ex.Message;
+            if (_source is null && !_isNew)
+                _missing = true;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (!_isNew && _source is null)
+            return;
+
+        var error = _form.Validate();
+        if (error is not null)
+        {
+            _saved = false;
+            _message = error;
+            return;
+        }
+
+        _saving = true;
+        _message = null;
+        _saved = false;
+        try
+        {
+            var session = Auth.CurrentUser;
+            var companyId = session?.ActiveCompanyId ?? 0;
+            var officeId = session?.ActiveOfficeId ?? 0;
+            var personId = session?.PersonId ?? 0;
+            if (companyId <= 0 || officeId <= 0 || personId <= 0)
+            {
+                _message = "Sign in again so company, office, and person are stored in this session.";
+                return;
+            }
+
+            if (_isNew)
+            {
+                await Api.CreateAsync(new OvertimeRequestForCreationDto
+                {
+                    CompanyId = companyId,
+                    CompanyOfficeId = officeId,
+                    PersonId = personId,
+                    RequestNo = _form.RequestNo.Trim(),
+                    RequestDate = _form.RequestDate,
+                    OvertimeDate = _form.OvertimeDate,
+                    Reason = _form.Reason.Trim(),
+                    PlannedStartTime = ToClock(_form.PlannedStart),
+                    PlannedEndTime = ToClock(_form.PlannedEnd),
+                    CreatedById = session?.UserId ?? 0
+                });
+                Nav.NavigateTo("/overtime-requests");
+                return;
+            }
+
+            await Api.UpdateAsync(Id, new OvertimeRequestForUpdateDto
+            {
+                CompanyId = companyId,
+                CompanyOfficeId = officeId,
+                PersonId = personId,
+                RequestNo = _form.RequestNo.Trim(),
+                RequestDate = _form.RequestDate,
+                OvertimeDate = _form.OvertimeDate,
+                Reason = _form.Reason.Trim(),
+                WorkDescription = _source!.WorkDescription,
+                PlannedStartTime = ToClock(_form.PlannedStart),
+                PlannedEndTime = ToClock(_form.PlannedEnd),
+                TotalPlannedMinutes = _source.TotalPlannedMinutes,
+                ActualStartTime = _source.ActualStartTime,
+                ActualEndTime = _source.ActualEndTime,
+                TotalActualMinutes = _source.TotalActualMinutes,
+                ApprovedTime = _source.ApprovedTime,
+                RejectionReason = _source.RejectionReason,
+                Note = _source.Note,
+                UpdatedById = session?.UserId ?? 0
+            });
+
+            _saved = true;
+            _message = "Saved.";
+            _requestNo = _form.RequestNo.Trim();
+            Nav.NavigateTo($"/overtime-requests/{Id}", replace: true);
+        }
+        catch (Exception ex)
+        {
+            _message = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void GoEdit() => Nav.NavigateTo($"/overtime-requests/{Id}/edit");
+
+    private void Back()
+    {
+        if (_editing && !_isNew)
+            Nav.NavigateTo($"/overtime-requests/{Id}");
+        else
+            Nav.NavigateTo("/overtime-requests");
+    }
+
+    private static string ToClock(TimeSpan value) => value.ToString(@"hh\:mm\:ss");
+
+    private sealed class EditModel
+    {
+        public string RequestNo { get; set; } = string.Empty;
+        public DateTime RequestDate { get; set; }
+        public DateTime OvertimeDate { get; set; }
+        public string Reason { get; set; } = string.Empty;
+        public TimeSpan PlannedStart { get; set; }
+        public TimeSpan PlannedEnd { get; set; }
+
+        public static EditModel CreateNew()
+        {
+            var today = DateTime.Today;
+            return new EditModel
+            {
+                RequestDate = today,
+                OvertimeDate = today
+            };
+        }
+
+        public static EditModel From(OvertimeRequestDto item) => new()
+        {
+            RequestNo = item.RequestNo,
+            RequestDate = item.RequestDate,
+            OvertimeDate = item.OvertimeDate,
+            Reason = item.Reason,
+            PlannedStart = ParseClock(item.PlannedStartTime),
+            PlannedEnd = ParseClock(item.PlannedEndTime)
+        };
+
+        public string? Validate()
+        {
+            if (string.IsNullOrWhiteSpace(RequestNo)) return "Request No is required.";
+            if (RequestDate == default) return "Request Date is required.";
+            if (OvertimeDate == default) return "Overtime Date is required.";
+            if (string.IsNullOrWhiteSpace(Reason)) return "Reason is required.";
+            return null;
+        }
+
+        private static TimeSpan ParseClock(string? value) =>
+            TimeSpan.TryParse(value, out var time) ? time : TimeSpan.Zero;
+    }
+}

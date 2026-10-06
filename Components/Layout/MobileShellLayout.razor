@@ -1,0 +1,115 @@
+@using BamboeUp.Mobile.Shell.Services
+@inherits LayoutComponentBase
+@implements IDisposable
+@inject MobileAuthService Auth
+@inject NavigationManager Nav
+
+<div class="mh-shell">
+    <header class="mh-top">
+        <div class="mh-brand">
+            <img class="mh-brand-logo" src="images/bamboo-mark.png" alt="" width="36" height="36" />
+            <div class="mh-brand-text">
+                <div class="mh-brand-name">BamboeUp</div>
+                <div class="mh-brand-sub">.Mobile</div>
+            </div>
+        </div>
+        <button type="button" class="mh-avatar" @onclick='() => Nav.NavigateTo("/profile")' title="Profile" aria-label="Profile">
+            @Initials
+        </button>
+    </header>
+
+    <BamboeUp.Mobile.Components.Shared.SyncStatus />
+
+    <main class="mh-body">
+        @Body
+    </main>
+
+    <nav class="mh-nav" aria-label="Main">
+        <a class="mh-nav-item @(IsActive("/") ? "active" : null)" href="/">
+            <span class="mh-nav-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="@(IsActive("/") ? "currentColor" : "none")" stroke="currentColor" stroke-width="1.8">
+                    <path d="M4 10.5 12 4l8 6.5V20a1 1 0 0 1-1 1h-5v-6H10v6H5a1 1 0 0 1-1-1v-9.5z"/>
+                </svg>
+            </span>
+            <span>Home</span>
+        </a>
+        <a class="mh-nav-item @(IsActive("/notifications") ? "active" : null)" href="/notifications">
+            <span class="mh-nav-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <path d="M6 9a6 6 0 1 1 12 0c0 4 1.5 5.5 2 6.5H4c.5-1 2-2.5 2-6.5z"/><path d="M10 19a2 2 0 0 0 4 0"/>
+                </svg>
+            </span>
+            <span>Notification</span>
+        </a>
+        <a class="mh-nav-item @(IsActive("/profile") ? "active" : null)" href="/profile">
+            <span class="mh-nav-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <circle cx="12" cy="8" r="3.2"/><path d="M5.5 19c1.6-3 4-4.2 6.5-4.2S16.9 16 18.5 19"/>
+                </svg>
+            </span>
+            <span>Profile</span>
+        </a>
+        <button type="button" class="mh-nav-item mh-nav-btn" @onclick="LogoutAsync">
+            <span class="mh-nav-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8">
+                    <path d="M10 4H6a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h4"/><path d="M14 12H4"/><path d="m16 8 4 4-4 4"/>
+                </svg>
+            </span>
+            <span>Logout</span>
+        </button>
+    </nav>
+</div>
+
+@code {
+    private string? _uri;
+
+    private string Initials
+    {
+        get
+        {
+            var name = Auth.CurrentUser?.FullName ?? Auth.CurrentUser?.UserName ?? "?";
+            var parts = name.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 2)
+                return $"{parts[0][0]}{parts[1][0]}".ToUpperInvariant();
+            return name.Length >= 2
+                ? name[..2].ToUpperInvariant()
+                : (name.Length > 0 ? name[..1].ToUpperInvariant() : "?");
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        _uri = Nav.Uri;
+        Nav.LocationChanged += OnLocationChanged;
+        Auth.AuthStateChanged += OnAuthChanged;
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        _uri = e.Location.ToString();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnAuthChanged() => InvokeAsync(StateHasChanged);
+
+    private bool IsActive(string path)
+    {
+        if (string.IsNullOrEmpty(_uri)) return false;
+        var relative = Nav.ToBaseRelativePath(_uri);
+        if (path == "/")
+            return string.IsNullOrEmpty(relative) || relative == "/";
+        return relative.StartsWith(path.TrimStart('/'), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private async Task LogoutAsync()
+    {
+        await Auth.LogoutAsync();
+        Nav.NavigateTo("/login", replace: true);
+    }
+
+    public void Dispose()
+    {
+        Nav.LocationChanged -= OnLocationChanged;
+        Auth.AuthStateChanged -= OnAuthChanged;
+    }
+}

@@ -1,0 +1,68 @@
+@page "/profile"
+@layout BamboeUp.Mobile.Components.Layout.MobileShellLayout
+@using BamboeUp.Mobile.Shell.Device
+@using BamboeUp.Mobile.Shell.Services
+@inject MobileAuthService Auth
+@inject IDeviceServices Device
+@inject NavigationManager Nav
+
+<div class="page-pad">
+    <h1 class="section-title">Profile</h1>
+
+    @if (Auth.CanEnterApp)
+    {
+        <div class="profile-card">
+            <div class="avatar lg">@(Auth.CurrentUser!.FullName?.FirstOrDefault() ?? '?')</div>
+            <div>
+                <div class="profile-name">@Auth.CurrentUser.FullName</div>
+                <div class="muted">@Auth.CurrentUser.UserName · @Auth.CurrentUser.Role</div>
+                <div class="muted">@Auth.CurrentUser.ActiveCompanyName</div>
+            </div>
+        </div>
+
+        <div class="action-stack">
+            <button class="btn-secondary btn-block" @onclick="TestCamera">Test camera</button>
+            <button class="btn-secondary btn-block" @onclick="TestLocation">Test location</button>
+            <button class="btn-secondary btn-block" @onclick="TestBiometric">Test biometric</button>
+            <button class="btn-danger btn-block" @onclick="Logout">Log out</button>
+        </div>
+        @if (!string.IsNullOrEmpty(_deviceMsg))
+        {
+            <p class="muted device-msg">@_deviceMsg</p>
+        }
+    }
+    else
+    {
+        <a class="btn-primary" href="/login">Sign in</a>
+    }
+</div>
+
+@code {
+    private string? _deviceMsg;
+
+    private async Task TestCamera()
+    {
+        var photo = await Device.CapturePhotoAsync();
+        _deviceMsg = photo is null ? "Camera is unavailable or was denied." : $"Photo: {photo.FileName}";
+    }
+
+    private async Task TestLocation()
+    {
+        var loc = await Device.GetCurrentLocationAsync();
+        _deviceMsg = loc is null
+            ? "Location is unavailable or was denied."
+            : $"Lat {loc.Latitude:F5}, Lon {loc.Longitude:F5}";
+    }
+
+    private async Task TestBiometric()
+    {
+        var ok = await Device.AuthenticateBiometricAsync("Verify this device");
+        _deviceMsg = ok ? "Biometric succeeded." : "Biometric failed or is unavailable.";
+    }
+
+    private async Task Logout()
+    {
+        await Auth.LogoutAsync();
+        Nav.NavigateTo("/login", replace: true);
+    }
+}

@@ -1,0 +1,131 @@
+@page "/holidays/day/{Day}"
+@layout MobileShellLayout
+@using Microsoft.AspNetCore.Components.Forms
+@using BamboeUp.Mobile.Modules.Services
+@using BamboeUp.Mobile.Shell.Services
+@using Shared.DataTransferObjects
+@inject HolidayApi Api
+@inject MobileAuthService Auth
+
+<div class="me-page">
+    <div class="mh-section-head">
+        <div class="me-head-row">
+            <div class="mh-section-title"><h2>@_date.ToString("dd MMM yyyy")</h2></div>
+            <a class="me-refresh" href="/holidays">Calendar</a>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <p class="me-warn">@_error</p>
+    }
+    @if (!string.IsNullOrWhiteSpace(_ok))
+    {
+        <p class="me-ok">@_ok</p>
+    }
+
+    <div class="me-list">
+        @foreach (var item in _events)
+        {
+            <a class="me-card" href="@($"/holidays/{item.EventGuid}")">
+                <h3>@item.Title</h3>
+                <p class="me-status">@Show(item.Description)</p>
+            </a>
+        }
+        @if (_events.Count == 0)
+        {
+            <div class="me-card"><p class="me-empty">No holiday on this day.</p></div>
+        }
+    </div>
+
+    <div class="me-card me-form">
+        <label class="me-label">Holiday Name</label>
+        <InputText class="me-input" @bind-Value="_name" />
+        <label class="me-label">Description</label>
+        <InputText class="me-input" @bind-Value="_description" />
+        <label class="me-label">Holiday Type Id</label>
+        <InputNumber class="me-input" @bind-Value="_typeId" />
+        <label class="me-label">National</label>
+        <InputCheckbox @bind-Value="_national" />
+        <label class="me-label">Company Holiday</label>
+        <InputCheckbox @bind-Value="_company" />
+        <button type="button" class="me-save" @onclick="SaveAsync" disabled="@_saving">Save</button>
+    </div>
+</div>
+
+@code {
+    [Parameter] public string Day { get; set; } = "";
+
+    private DateTime _date = DateTime.Today;
+    private readonly List<CalendarEventDto> _events = [];
+    private string _name = "";
+    private string? _description;
+    private long? _typeId;
+    private bool _national = true;
+    private bool _company;
+    private bool _saving;
+    private string? _error;
+    private string? _ok;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _date = DateTime.TryParse(Day, out var parsed) ? parsed.Date : DateTime.Today;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _error = null;
+        try
+        {
+            _events.Clear();
+            var items = await Api.GetEventsAsync(_date, _date.AddDays(1));
+            _events.AddRange(items.Where(item => item.Start.Date == _date));
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            _error = "Holiday Name is required.";
+            _ok = null;
+            return;
+        }
+
+        _saving = true;
+        _error = null;
+        _ok = null;
+        try
+        {
+            await Api.CreateAsync(new HolidayForCreationDto
+            {
+                HolidayDate = _date,
+                HolidayName = _name.Trim(),
+                HolidayDescription = string.IsNullOrWhiteSpace(_description) ? null : _description.Trim(),
+                SrHolidayType = _typeId is > 0 ? _typeId : null,
+                IsNational = _national,
+                IsCompanyHoliday = _company,
+                CreatedById = Auth.CurrentUser?.UserId ?? 0
+            });
+            _name = "";
+            _description = null;
+            _ok = "Holiday saved.";
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private static string Show(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
+}

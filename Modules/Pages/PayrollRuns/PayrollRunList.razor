@@ -1,0 +1,76 @@
+@page "/payroll-runs"
+@layout MobileShellLayout
+@using BamboeUp.Mobile.Modules.Services
+@using Shared.DataTransferObjects
+@inject PayrollRunApi Api
+
+<div class="me-page">
+    <div class="mh-section-head">
+        <div class="me-head-row">
+            <div class="mh-section-title"><h2>Payroll Run</h2></div>
+            <div class="me-head-actions">
+                <a class="me-refresh" href="/forms">Form</a>
+                <button type="button" class="me-refresh" @onclick="LoadAsync" disabled="@_loading">Refresh</button>
+            </div>
+        </div>
+        <p class="mh-section-sub">Mobile-05. Process</p>
+    </div>
+
+    @if (_loading)
+    {
+        <p class="me-status">Loading...</p>
+    }
+    else
+    {
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <p class="me-warn">@_error</p>
+        }
+        <div class="me-list">
+            @foreach (var item in _items)
+            {
+                <a class="me-card" href="@($"/payroll-runs/{item.ProcessDefinitionGuid}")">
+                    <header class="me-card-top"><h3>@item.ProcessName</h3></header>
+                    <dl>
+                        <div><dt>Code</dt><dd>@item.ProcessCode</dd></div>
+                        <div><dt>Category</dt><dd>@Show(item.Category)</dd></div>
+                    </dl>
+                </a>
+            }
+        </div>
+        @if (_items.Count == 0)
+        {
+            <div class="me-card"><p class="me-empty">No process definitions for PAYROLL_RUN.</p></div>
+        }
+    }
+</div>
+
+@code {
+    private const string ProcessCode = "PAYROLL_RUN";
+    private readonly List<ProcessDefinitionDto> _items = [];
+    private bool _loading = true;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _items.Clear();
+            _items.AddRange(await Api.GetDefinitionsAsync(ProcessCode));
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static string Show(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
+}

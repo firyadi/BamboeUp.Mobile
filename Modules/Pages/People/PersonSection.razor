@@ -1,0 +1,241 @@
+@page "/people/{Id:guid}/section/{Section}"
+@layout MobileShellLayout
+@using Microsoft.AspNetCore.Components.Forms
+@using BamboeUp.Mobile.Modules.Services
+@using BamboeUp.Mobile.Shell.Services
+@using Shared.DataTransferObjects
+@inject PersonApi Api
+@inject MobileAuthService Auth
+
+<div class="me-page">
+    <div class="mh-section-head">
+        <div class="me-head-row">
+            <div class="mh-section-title"><h2>@Title</h2></div>
+            <a class="me-refresh" href="@($"/people/{Id}")">Back</a>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <p class="me-status">Loading...</p>
+    }
+    else
+    {
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <p class="me-warn">@_error</p>
+        }
+        <div class="me-list">
+            @foreach (var line in _lines)
+            {
+                <div class="me-card"><h3>@line</h3></div>
+            }
+            @if (_lines.Count == 0)
+            {
+                <div class="me-card"><p class="me-empty">No records yet.</p></div>
+            }
+        </div>
+        <div class="me-card me-form">
+            @if (Section == "address")
+            {
+                <label class="me-label">Address</label>
+                <InputText class="me-input" @bind-Value="_address" />
+                <label class="me-label">Address Type Id</label>
+                <InputNumber class="me-input" @bind-Value="_typeId" />
+                <label class="me-label">Country Id</label>
+                <InputNumber class="me-input" @bind-Value="_countryId" />
+                <label class="me-label">Province Id</label>
+                <InputNumber class="me-input" @bind-Value="_provinceId" />
+                <label class="me-label">City Id</label>
+                <InputNumber class="me-input" @bind-Value="_cityId" />
+            }
+            else if (Section == "contact")
+            {
+                <label class="me-label">Contact</label>
+                <InputText class="me-input" @bind-Value="_text" />
+                <label class="me-label">Contact Type Id</label>
+                <InputNumber class="me-input" @bind-Value="_typeId" />
+            }
+            else if (Section == "education")
+            {
+                <label class="me-label">Institution</label>
+                <InputText class="me-input" @bind-Value="_text" />
+                <label class="me-label">Education Level Id</label>
+                <InputNumber class="me-input" @bind-Value="_typeId" />
+            }
+            else if (Section == "emergency")
+            {
+                <label class="me-label">Contact Name</label>
+                <InputText class="me-input" @bind-Value="_text" />
+                <label class="me-label">Phone</label>
+                <InputText class="me-input" @bind-Value="_phone" />
+                <label class="me-label">Relationship Id</label>
+                <InputNumber class="me-input" @bind-Value="_typeId" />
+            }
+            else if (Section == "identification")
+            {
+                <label class="me-label">Identification</label>
+                <InputText class="me-input" @bind-Value="_text" />
+                <label class="me-label">Identification Type Id</label>
+                <InputNumber class="me-input" @bind-Value="_typeId" />
+            }
+            <button type="button" class="me-save" @onclick="SaveAsync" disabled="@_saving">Save</button>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+    [Parameter] public string Section { get; set; } = "";
+
+    private readonly List<string> _lines = [];
+    private long _personId;
+    private bool _loading = true;
+    private bool _saving;
+    private string? _error;
+    private string _text = "";
+    private string _address = "";
+    private string? _phone;
+    private long _typeId;
+    private long _countryId;
+    private long _provinceId;
+    private long _cityId;
+
+    private string Title => Section switch
+    {
+        "address" => "Address",
+        "contact" => "Contact",
+        "education" => "Education",
+        "emergency" => "Emergency Contact",
+        "identification" => "Identification",
+        _ => "Detail"
+    };
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        _lines.Clear();
+        try
+        {
+            var person = await Api.GetByIdAsync(Id);
+            if (person is null)
+            {
+                _error = "Person was not found.";
+                return;
+            }
+
+            _personId = person.PersonId;
+            switch (Section)
+            {
+                case "address":
+                    _lines.AddRange((await Api.GetAddressesAsync(Id)).Select(item => item.Address));
+                    break;
+                case "contact":
+                    _lines.AddRange((await Api.GetContactsAsync(Id)).Select(item => item.ContactValue));
+                    break;
+                case "education":
+                    _lines.AddRange((await Api.GetEducationsAsync(Id)).Select(item => item.InstitutionName));
+                    break;
+                case "emergency":
+                    _lines.AddRange((await Api.GetEmergencyContactsAsync(Id)).Select(item => item.ContactName));
+                    break;
+                case "identification":
+                    _lines.AddRange((await Api.GetIdentificationsAsync(Id)).Select(item => item.IdentificationValue));
+                    break;
+                default:
+                    _error = "This detail is not in the form.";
+                    break;
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        _saving = true;
+        _error = null;
+        var userId = Auth.CurrentUser?.UserId ?? 0;
+        try
+        {
+            switch (Section)
+            {
+                case "address":
+                    await Api.AddAddressAsync(Id, new PersonAddressForCreationDto
+                    {
+                        PersonId = _personId,
+                        Address = _address.Trim(),
+                        SrAddressType = _typeId,
+                        CountryId = _countryId,
+                        ProvinceId = _provinceId,
+                        CityId = _cityId,
+                        CreatedById = userId
+                    });
+                    _address = "";
+                    break;
+                case "contact":
+                    await Api.AddContactAsync(Id, new PersonContactForCreationDto
+                    {
+                        PersonId = _personId,
+                        ContactValue = _text.Trim(),
+                        SrContactType = _typeId,
+                        CreatedById = userId
+                    });
+                    _text = "";
+                    break;
+                case "education":
+                    await Api.AddEducationAsync(Id, new PersonEducationForCreationDto
+                    {
+                        PersonId = _personId,
+                        InstitutionName = _text.Trim(),
+                        SrEducationLevel = _typeId,
+                        CreatedById = userId
+                    });
+                    _text = "";
+                    break;
+                case "emergency":
+                    await Api.AddEmergencyContactAsync(Id, new PersonEmergencyContactForCreationDto
+                    {
+                        PersonId = _personId,
+                        ContactName = _text.Trim(),
+                        Phone = string.IsNullOrWhiteSpace(_phone) ? null : _phone.Trim(),
+                        SrRelationship = _typeId,
+                        CreatedById = userId
+                    });
+                    _text = "";
+                    _phone = null;
+                    break;
+                case "identification":
+                    await Api.AddIdentificationAsync(Id, new PersonIdentificationForCreationDto
+                    {
+                        PersonId = _personId,
+                        IdentificationValue = _text.Trim(),
+                        SrIdentificationType = _typeId,
+                        CreatedById = userId
+                    });
+                    _text = "";
+                    break;
+            }
+
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            _loading = false;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

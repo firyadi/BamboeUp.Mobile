@@ -1,0 +1,156 @@
+@page "/holidays/{Id:guid}"
+@layout MobileShellLayout
+@using Microsoft.AspNetCore.Components.Forms
+@using BamboeUp.Mobile.Modules.Services
+@using BamboeUp.Mobile.Shell.Services
+@using Shared.DataTransferObjects
+@inject HolidayApi Api
+@inject MobileAuthService Auth
+@inject NavigationManager Nav
+
+<div class="me-page">
+    <div class="mh-section-head">
+        <div class="me-head-row">
+            <div class="mh-section-title"><h2>Holiday</h2></div>
+            <a class="me-refresh" href="@($"/holidays/day/{_form.HolidayDate:yyyy-MM-dd}")">Back</a>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <p class="me-status">Loading...</p>
+    }
+    else if (_missing)
+    {
+        <div class="me-card"><p class="me-empty">Holiday was not found.</p></div>
+    }
+    else
+    {
+        <div class="me-card me-form">
+            @if (!string.IsNullOrWhiteSpace(_error))
+            {
+                <p class="me-warn">@_error</p>
+            }
+            <label class="me-label">Holiday Name</label>
+            <InputText class="me-input" @bind-Value="_form.HolidayName" />
+            <label class="me-label">Date</label>
+            <InputDate class="me-input" @bind-Value="_form.HolidayDate" />
+            <label class="me-label">Description</label>
+            <InputText class="me-input" @bind-Value="_form.HolidayDescription" />
+            <label class="me-label">Holiday Type Id</label>
+            <InputNumber class="me-input" @bind-Value="_form.SrHolidayType" />
+            <label class="me-label">National</label>
+            <InputCheckbox @bind-Value="_form.IsNational" />
+            <label class="me-label">Company Holiday</label>
+            <InputCheckbox @bind-Value="_form.IsCompanyHoliday" />
+            <div class="me-head-actions">
+                <button type="button" class="me-refresh" @onclick="DeleteAsync" disabled="@_saving">Delete</button>
+                <button type="button" class="me-save" @onclick="SaveAsync" disabled="@_saving">Save</button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private bool _loading = true;
+    private bool _missing;
+    private bool _saving;
+    private string? _error;
+    private readonly HolidayForm _form = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _error = null;
+        _missing = false;
+        try
+        {
+            var item = await Api.GetByIdAsync(Id);
+            if (item is null)
+            {
+                _missing = true;
+                return;
+            }
+
+            _form.HolidayName = item.HolidayName;
+            _form.HolidayDate = item.HolidayDate;
+            _form.HolidayDescription = item.HolidayDescription;
+            _form.SrHolidayType = item.SrHolidayType;
+            _form.IsNational = item.IsNational;
+            _form.IsCompanyHoliday = item.IsCompanyHoliday;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_form.HolidayName))
+        {
+            _error = "Holiday Name is required.";
+            return;
+        }
+
+        _saving = true;
+        _error = null;
+        try
+        {
+            await Api.UpdateAsync(Id, new HolidayForUpdateDto
+            {
+                HolidayName = _form.HolidayName.Trim(),
+                HolidayDate = _form.HolidayDate,
+                HolidayDescription = string.IsNullOrWhiteSpace(_form.HolidayDescription) ? null : _form.HolidayDescription.Trim(),
+                SrHolidayType = _form.SrHolidayType is > 0 ? _form.SrHolidayType : null,
+                IsNational = _form.IsNational,
+                IsCompanyHoliday = _form.IsCompanyHoliday,
+                UpdatedById = Auth.CurrentUser?.UserId ?? 0
+            });
+            Nav.NavigateTo($"/holidays/day/{_form.HolidayDate:yyyy-MM-dd}");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task DeleteAsync()
+    {
+        _saving = true;
+        _error = null;
+        try
+        {
+            await Api.DeleteAsync(Id, new HolidayForDeleteDto { DeletedById = Auth.CurrentUser?.UserId ?? 0 });
+            Nav.NavigateTo($"/holidays/day/{_form.HolidayDate:yyyy-MM-dd}");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private sealed class HolidayForm
+    {
+        public string HolidayName { get; set; } = "";
+        public DateTime HolidayDate { get; set; } = DateTime.Today;
+        public string? HolidayDescription { get; set; }
+        public long? SrHolidayType { get; set; }
+        public bool IsNational { get; set; }
+        public bool IsCompanyHoliday { get; set; }
+    }
+}

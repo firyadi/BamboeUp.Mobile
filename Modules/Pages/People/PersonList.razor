@@ -1,0 +1,81 @@
+@page "/people"
+@layout MobileShellLayout
+@using BamboeUp.Mobile.Modules.Services
+@using Shared.DataTransferObjects
+@inject PersonApi Api
+
+<div class="me-page">
+    <div class="mh-section-head">
+        <div class="me-head-row">
+            <div class="mh-section-title"><h2>Person</h2></div>
+            <div class="me-head-actions">
+                <a class="me-refresh" href="/forms">Form</a>
+                <a class="me-new" href="/people/new">New</a>
+                <button type="button" class="me-refresh" @onclick="LoadAsync" disabled="@_loading">Refresh</button>
+            </div>
+        </div>
+        <p class="mh-section-sub">Mobile-02. Header-Detail</p>
+    </div>
+
+    @if (_loading)
+    {
+        <p class="me-status">Loading...</p>
+    }
+    else
+    {
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <p class="me-warn">@_error</p>
+        }
+        <div class="me-list">
+            @foreach (var item in _items)
+            {
+                <a class="me-card" href="@($"/people/{item.PersonGuid}")">
+                    <header class="me-card-top"><h3>@Name(item)</h3></header>
+                    <dl>
+                        <div><dt>Birth Date</dt><dd>@item.BirthDate.ToString("dd MMM yyyy")</dd></div>
+                        <div><dt>National Id</dt><dd>@Show(item.NationalIdNo)</dd></div>
+                    </dl>
+                </a>
+            }
+        </div>
+        @if (_items.Count == 0)
+        {
+            <div class="me-card"><p class="me-empty">No records yet.</p></div>
+        }
+    }
+</div>
+
+@code {
+    private readonly List<PersonDto> _items = [];
+    private bool _loading = true;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _items.Clear();
+            _items.AddRange(await Api.GetListAsync());
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static string Name(PersonDto item) =>
+        string.IsNullOrWhiteSpace(item.PersonName)
+            ? string.Join(" ", new[] { item.FirstName, item.MiddleName, item.LastName }.Where(part => !string.IsNullOrWhiteSpace(part)))
+            : item.PersonName;
+
+    private static string Show(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
+}

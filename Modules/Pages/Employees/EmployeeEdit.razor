@@ -1,0 +1,148 @@
+@page "/employees/new"
+@page "/employees/{Id:guid}/edit"
+@layout MobileShellLayout
+@using Microsoft.AspNetCore.Components.Forms
+@using BamboeUp.Mobile.Modules.Services
+@using BamboeUp.Mobile.Shell.Services
+@using Shared.DataTransferObjects
+@inject EmployeeApi Api
+@inject MobileAuthService Auth
+@inject NavigationManager Nav
+
+<div class="me-page">
+    <div class="mh-section-head">
+        <div class="me-head-row">
+            <div class="mh-section-title"><h2>@(IsNew ? "New Employee" : "Edit Employee")</h2></div>
+            <a class="me-refresh" href="@(IsNew ? "/employees" : $"/employees/{Id}")">Back</a>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <p class="me-status">Loading...</p>
+    }
+    else
+    {
+        <div class="me-card me-form">
+            @if (!string.IsNullOrWhiteSpace(_error))
+            {
+                <p class="me-warn">@_error</p>
+            }
+            <label class="me-label">Person Id</label>
+            <InputNumber class="me-input" @bind-Value="_form.PersonId" />
+            <label class="me-label">Employee No</label>
+            <InputText class="me-input" @bind-Value="_form.EmployeeNo" />
+            <label class="me-label">Hire Date</label>
+            <InputDate class="me-input" @bind-Value="_form.HireDate" />
+            <label class="me-label">Employment Status Id</label>
+            <InputNumber class="me-input" @bind-Value="_form.SrEmploymentStatus" />
+            <label class="me-label">Employment Type Id</label>
+            <InputNumber class="me-input" @bind-Value="_form.SrEmploymentType" />
+            <button type="button" class="me-save" @onclick="SaveAsync" disabled="@_saving">Save</button>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private bool IsNew => Id == Guid.Empty;
+    private bool _loading = true;
+    private bool _saving;
+    private string? _error;
+    private readonly EmployeeForm _form = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _error = null;
+        if (IsNew)
+        {
+            _loading = false;
+            return;
+        }
+
+        try
+        {
+            var item = await Api.GetByIdAsync(Id);
+            if (item is null)
+            {
+                _error = "Employee was not found.";
+                return;
+            }
+
+            _form.PersonId = item.PersonId;
+            _form.EmployeeNo = item.EmployeeNo;
+            _form.HireDate = item.HireDate;
+            _form.SrEmploymentStatus = item.SrEmploymentStatus;
+            _form.SrEmploymentType = item.SrEmploymentType;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_form.EmployeeNo))
+        {
+            _error = "Employee No is required.";
+            return;
+        }
+
+        _saving = true;
+        _error = null;
+        try
+        {
+            var userId = Auth.CurrentUser?.UserId ?? 0;
+            if (IsNew)
+            {
+                await Api.CreateAsync(new EmployeeForCreationDto
+                {
+                    PersonId = _form.PersonId,
+                    EmployeeNo = _form.EmployeeNo.Trim(),
+                    HireDate = _form.HireDate,
+                    SrEmploymentStatus = _form.SrEmploymentStatus,
+                    SrEmploymentType = _form.SrEmploymentType,
+                    CreatedById = userId
+                });
+                Nav.NavigateTo("/employees");
+            }
+            else
+            {
+                await Api.UpdateAsync(Id, new EmployeeForUpdateDto
+                {
+                    PersonId = _form.PersonId,
+                    EmployeeNo = _form.EmployeeNo.Trim(),
+                    HireDate = _form.HireDate,
+                    SrEmploymentStatus = _form.SrEmploymentStatus,
+                    SrEmploymentType = _form.SrEmploymentType,
+                    UpdatedById = userId
+                });
+                Nav.NavigateTo($"/employees/{Id}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private sealed class EmployeeForm
+    {
+        public long PersonId { get; set; }
+        public string EmployeeNo { get; set; } = "";
+        public DateTime HireDate { get; set; } = DateTime.Today;
+        public long SrEmploymentStatus { get; set; }
+        public long SrEmploymentType { get; set; }
+    }
+}

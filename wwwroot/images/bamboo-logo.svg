@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 96" fill="none">
+  <!-- stalk -->
+  <path d="M38 92c0-6 1.2-14 1.5-22 .3-8 .2-16-.1-24-.3-9-.8-17-1-26-.1-4 .6-7.5 2.2-10.5"
+        stroke="#D4A84A" stroke-width="5.5" stroke-linecap="round"/>
+  <path d="M34 48h10M33.5 62h11M34 76h10" stroke="#C4923A" stroke-width="2.2" stroke-linecap="round"/>
+  <!-- left leaf -->
+  <path d="M37 28c-10-2-18 4-22 14 8-2 16 0 22-4 4-2.5 5-7 0-10z" fill="#E8C15A"/>
+  <path d="M37 28c-10-2-18 4-22 14" stroke="#B8862F" stroke-width="1.2" fill="none"/>
+  <!-- right leaf -->
+  <path d="M41 22c10-4 20 2 24 12-8 0-15 3-22 6-5 2-7-2.5-2-8z" fill="#D4A84A"/>
+  <path d="M41 22c10-4 20 2 24 12" stroke="#B8862F" stroke-width="1.2" fill="none"/>
+  <!-- small top leaf -->
+  <path d="M40 14c6-8 16-8 22-2-8 2-14 6-20 10-4 2.5-6-2-2-8z" fill="#F0D078"/>
+</svg>

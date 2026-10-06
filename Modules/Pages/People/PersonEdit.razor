@@ -1,0 +1,168 @@
+@page "/people/new"
+@page "/people/{Id:guid}/edit"
+@layout MobileShellLayout
+@using Microsoft.AspNetCore.Components.Forms
+@using BamboeUp.Mobile.Modules.Services
+@using BamboeUp.Mobile.Shell.Services
+@using Shared.DataTransferObjects
+@inject PersonApi Api
+@inject MobileAuthService Auth
+@inject NavigationManager Nav
+
+<div class="me-page">
+    <div class="mh-section-head">
+        <div class="me-head-row">
+            <div class="mh-section-title"><h2>@(IsNew ? "New Person" : "Edit Person")</h2></div>
+            <a class="me-refresh" href="@(IsNew ? "/people" : $"/people/{Id}")">Back</a>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <p class="me-status">Loading...</p>
+    }
+    else
+    {
+        <div class="me-card me-form">
+            @if (!string.IsNullOrWhiteSpace(_error))
+            {
+                <p class="me-warn">@_error</p>
+            }
+            <label class="me-label">First Name</label>
+            <InputText class="me-input" @bind-Value="_form.FirstName" />
+            <label class="me-label">Middle Name</label>
+            <InputText class="me-input" @bind-Value="_form.MiddleName" />
+            <label class="me-label">Last Name</label>
+            <InputText class="me-input" @bind-Value="_form.LastName" />
+            <label class="me-label">Birth Date</label>
+            <InputDate class="me-input" @bind-Value="_form.BirthDate" />
+            <label class="me-label">Place of Birth</label>
+            <InputText class="me-input" @bind-Value="_form.PlaceofBirth" />
+            <label class="me-label">National Id</label>
+            <InputText class="me-input" @bind-Value="_form.NationalIdNo" />
+            <label class="me-label">Gender Id</label>
+            <InputNumber class="me-input" @bind-Value="_form.SrGender" />
+            <label class="me-label">Religion Id</label>
+            <InputNumber class="me-input" @bind-Value="_form.SrReligion" />
+            <button type="button" class="me-save" @onclick="SaveAsync" disabled="@_saving">Save</button>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private bool IsNew => Id == Guid.Empty;
+    private bool _loading = true;
+    private bool _saving;
+    private string? _error;
+    private readonly PersonForm _form = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _error = null;
+        if (IsNew)
+        {
+            _loading = false;
+            return;
+        }
+
+        try
+        {
+            var item = await Api.GetByIdAsync(Id);
+            if (item is null)
+            {
+                _error = "Person was not found.";
+                return;
+            }
+
+            _form.FirstName = item.FirstName;
+            _form.MiddleName = item.MiddleName;
+            _form.LastName = item.LastName;
+            _form.BirthDate = item.BirthDate;
+            _form.PlaceofBirth = item.PlaceofBirth;
+            _form.NationalIdNo = item.NationalIdNo;
+            _form.SrGender = item.SrGender;
+            _form.SrReligion = item.SrReligion;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_form.FirstName))
+        {
+            _error = "First Name is required.";
+            return;
+        }
+
+        _saving = true;
+        _error = null;
+        try
+        {
+            var userId = Auth.CurrentUser?.UserId ?? 0;
+            if (IsNew)
+            {
+                await Api.CreateAsync(new PersonForCreationDto
+                {
+                    FirstName = _form.FirstName.Trim(),
+                    MiddleName = Blank(_form.MiddleName),
+                    LastName = Blank(_form.LastName),
+                    BirthDate = _form.BirthDate,
+                    PlaceofBirth = Blank(_form.PlaceofBirth),
+                    NationalIdNo = Blank(_form.NationalIdNo),
+                    SrGender = _form.SrGender,
+                    SrReligion = _form.SrReligion,
+                    CreatedById = userId
+                });
+                Nav.NavigateTo("/people");
+            }
+            else
+            {
+                await Api.UpdateAsync(Id, new PersonForUpdateDto
+                {
+                    FirstName = _form.FirstName.Trim(),
+                    MiddleName = Blank(_form.MiddleName),
+                    LastName = Blank(_form.LastName),
+                    BirthDate = _form.BirthDate,
+                    PlaceofBirth = Blank(_form.PlaceofBirth),
+                    NationalIdNo = Blank(_form.NationalIdNo),
+                    SrGender = _form.SrGender,
+                    SrReligion = _form.SrReligion,
+                    UpdatedById = userId
+                });
+                Nav.NavigateTo($"/people/{Id}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private sealed class PersonForm
+    {
+        public string FirstName { get; set; } = "";
+        public string? MiddleName { get; set; }
+        public string? LastName { get; set; }
+        public DateTime BirthDate { get; set; } = DateTime.Today;
+        public string? PlaceofBirth { get; set; }
+        public string? NationalIdNo { get; set; }
+        public long SrGender { get; set; }
+        public long SrReligion { get; set; }
+    }
+}

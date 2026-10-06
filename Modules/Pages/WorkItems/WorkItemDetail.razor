@@ -1,0 +1,132 @@
+@page "/work-items/{Id:guid}"
+@layout MobileShellLayout
+@using BamboeUp.Mobile.Modules.Services
+@using Shared.DataTransferObjects
+@inject WorkItemApi Api
+
+<div class="me-page">
+    <div class="mh-section-head">
+        <div class="me-head-row">
+            <div class="mh-section-title"><h2>Work Item</h2></div>
+            <div class="me-head-actions">
+                <a class="me-refresh" href="/work-items">Board</a>
+                <a class="me-new" href="@($"/work-items/{Id}/edit")">Edit</a>
+            </div>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <p class="me-status">Loading...</p>
+    }
+    else if (_item is null)
+    {
+        <div class="me-card"><p class="me-empty">@_error ?? "Work item was not found."</p></div>
+    }
+    else
+    {
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <p class="me-warn">@_error</p>
+        }
+        @if (!string.IsNullOrWhiteSpace(_ok))
+        {
+            <p class="me-ok">@_ok</p>
+        }
+        <div class="me-card">
+            <header class="me-card-top"><h3>@_item.Title</h3></header>
+            <dl>
+                <div><dt>Code</dt><dd>@_item.WorkItemCode</dd></div>
+                <div><dt>Status</dt><dd>@StatusName(_item.WorkflowStatus)</dd></div>
+                <div><dt>Owner</dt><dd>@Show(_item.OwnerName ?? _item.OwnerUserName)</dd></div>
+                <div><dt>Priority</dt><dd>@Show(_item.Priority)</dd></div>
+                <div><dt>Due</dt><dd>@(_item.DueDate?.ToString("dd MMM yyyy") ?? "-")</dd></div>
+                <div><dt>Description</dt><dd>@Show(_item.Description)</dd></div>
+            </dl>
+        </div>
+        <div class="me-head-actions">
+            @foreach (var target in Targets(_item.WorkflowStatus))
+            {
+                <button type="button" class="me-save" @onclick="() => MoveAsync(target)" disabled="@_moving">@StatusName(target)</button>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private static readonly Dictionary<string, string[]> Moves = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["DRAFT"] = ["IN_PROGRESS", "ARCHIVED"],
+        ["IN_PROGRESS"] = ["DRAFT", "REVIEW", "DONE"],
+        ["REVIEW"] = ["IN_PROGRESS", "DONE"],
+        ["DONE"] = ["REVIEW", "ARCHIVED"],
+        ["ARCHIVED"] = ["DRAFT"]
+    };
+
+    [Parameter] public Guid Id { get; set; }
+
+    private WorkItemDto? _item;
+    private bool _loading = true;
+    private bool _moving;
+    private string? _error;
+    private string? _ok;
+
+    protected override async Task OnParametersSetAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _item = await Api.GetByIdAsync(Id);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static IEnumerable<string> Targets(string? status)
+    {
+        var key = string.IsNullOrWhiteSpace(status) ? "DRAFT" : status.Trim();
+        return Moves.TryGetValue(key, out var targets) ? targets : [];
+    }
+
+    private async Task MoveAsync(string target)
+    {
+        if (_item is null)
+            return;
+        _moving = true;
+        _error = null;
+        _ok = null;
+        try
+        {
+            await Api.MoveAsync(new KanbanCardMoveDto
+            {
+                CardGuid = _item.WorkItemGuid,
+                FromStatusCode = string.IsNullOrWhiteSpace(_item.WorkflowStatus) ? "DRAFT" : _item.WorkflowStatus,
+                ToStatusCode = target
+            });
+            _item = await Api.GetByIdAsync(Id);
+            _ok = $"Moved to {StatusName(target)}.";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _moving = false;
+        }
+    }
+
+    private static string StatusName(string? status) =>
+        string.IsNullOrWhiteSpace(status) ? "-" : status.Replace('_', ' ');
+
+    private static string Show(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
+}

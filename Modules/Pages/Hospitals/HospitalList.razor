@@ -1,0 +1,79 @@
+@page "/hospitals"
+@layout MobileShellLayout
+@using BamboeUp.Mobile.Modules.Services
+@using Shared.DataTransferObjects
+@inject HospitalApi Api
+
+<div class="me-page">
+    <div class="mh-section-head">
+        <div class="me-head-row">
+            <div class="mh-section-title"><h2>Hospital</h2></div>
+            <div class="me-head-actions">
+                <a class="me-refresh" href="/forms">Form</a>
+                <a class="me-new" href="/hospitals/new">New</a>
+                <button type="button" class="me-refresh" @onclick="LoadAsync" disabled="@_loading">Refresh</button>
+            </div>
+        </div>
+        <p class="mh-section-sub">Mobile-01. 1 Table</p>
+    </div>
+
+    @if (_loading)
+    {
+        <p class="me-status">Loading...</p>
+    }
+    else
+    {
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <p class="me-warn">@_error</p>
+        }
+        <div class="me-list">
+            @foreach (var item in _items)
+            {
+                <a class="me-card" href="@($"/hospitals/{item.HospitalGuid}")">
+                    <header class="me-card-top"><h3>@item.HospitalName</h3></header>
+                    <dl>
+                        <div><dt>Hospital Code</dt><dd>@Show(item.HospitalCode)</dd></div>
+                        <div><dt>Short Name</dt><dd>@Show(item.ShortName)</dd></div>
+                        <div><dt>Hospital Type</dt><dd>@Show(item.HospitalType)</dd></div>
+                        <div><dt>Phone No</dt><dd>@Show(item.PhoneNo)</dd></div>
+                    </dl>
+                </a>
+            }
+        </div>
+        @if (_items.Count == 0)
+        {
+            <div class="me-card"><p class="me-empty">No records yet.</p></div>
+        }
+    }
+</div>
+
+@code {
+    private readonly List<HospitalDto> _items = [];
+    private bool _loading = true;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _items.Clear();
+            _items.AddRange(await Api.GetListAsync());
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static string Show(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? "-" : value;
+}

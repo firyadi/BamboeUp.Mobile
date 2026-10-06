@@ -1,0 +1,289 @@
+@page "/overtime-requests"
+@layout MobileShellLayout
+@using BamboeUp.Mobile.Modules.Services
+@using BamboeUp.Mobile.Shell.Services
+@using Shared.DataTransferObjects
+@inject OvertimeRequestApi Api
+@inject MobileAuthService Auth
+@inject MobilePermissionService Rights
+@inject NavigationManager Nav
+
+<div class="ot-page">
+    <div class="mh-section-head" @onpointerdown="PullStart" @onpointermove="PullMove" @onpointerup="PullEnd" @onpointercancel="PullEnd">
+        <div class="ot-head-row">
+            <div class="mh-section-title">
+                <span class="mh-section-ico" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8">
+                        <circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>
+                    </svg>
+                </span>
+                <h2>Overtime Request</h2>
+            </div>
+            <div class="ot-head-actions">
+                <button type="button" class="ot-refresh" @onclick="LoadAsync" disabled="@_loading">Refresh</button>
+            </div>
+        </div>
+        <p class="mh-section-sub">Request overtime</p>
+        @if (_pullArmed)
+        {
+            <p class="mg-pull">Release to refresh</p>
+        }
+    </div>
+
+    @if (_loading)
+    {
+        <p class="ot-status">Loading...</p>
+    }
+    else if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <div class="ot-card ot-card-error">
+            <p>@_error</p>
+            <button type="button" class="ot-refresh" @onclick="LoadAsync">Try again</button>
+        </div>
+    }
+    else if (_items.Count == 0)
+    {
+        <div class="ot-card">
+            <p class="mg-empty">No overtime requests yet.</p>
+        </div>
+    }
+    else
+    {
+        <div class="mg-list">
+            @foreach (var group in OvertimeGroups)
+            {
+                <h2 class="mg-group">@group.Label</h2>
+                @foreach (var item in group.Items)
+                {
+                    var pending = item.ApprovedTime is null && string.IsNullOrWhiteSpace(item.RejectionReason);
+                    var open = _openId == item.OvertimeRequestGuid;
+                    var shift = open ? -88 : _dragId == item.OvertimeRequestGuid ? _dragX : 0;
+                    <div class="mg-swipe">
+                        @if (_rights.CanDelete)
+                        {
+                            <button type="button" class="mg-swipe-delete" @onclick="() => AskDelete(item)">Delete</button>
+                        }
+                        <a class="mg-row" style="transform: translateX(@(shift)px)"
+                           @onpointerdown="e => DragStart(e, item.OvertimeRequestGuid)"
+                           @onpointermove="DragMove"
+                           @onpointerup="DragEnd"
+                           @onpointercancel="DragEnd"
+                           @onclick="() => Open(item.OvertimeRequestGuid)" @onclick:preventDefault>
+                            <span class="mg-ico @(pending ? "tone-alert" : null)" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7">
+                                    <circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/>
+                                </svg>
+                            </span>
+                            <span class="mg-copy">
+                                <span class="mg-title">@(string.IsNullOrWhiteSpace(item.RequestNo) ? "Overtime Request" : item.RequestNo)</span>
+                                <span class="mg-sub">@Text(item.Reason) · @Clock(item.PlannedStartTime) – @Clock(item.PlannedEndTime)</span>
+                            </span>
+                            <span class="mg-meta">
+                                <span class="mg-time">@When(item.OvertimeDate)</span>
+                                <span class="mg-dot @(pending ? "unread" : null)"></span>
+                            </span>
+                        </a>
+                    </div>
+                }
+            }
+        </div>
+    }
+
+    @if (_rights.CanAdd)
+    {
+        <button type="button" class="mg-fab" @onclick='() => Nav.NavigateTo("/overtime-requests/new")' aria-label="New">+</button>
+    }
+
+    @if (_pendingDelete is not null)
+    {
+        <div class="mg-sheet-back" @onclick="CancelDelete">
+            <div class="mg-sheet" @onclick:stopPropagation="true">
+                <h3>Delete this request?</h3>
+                <p>@(string.IsNullOrWhiteSpace(_pendingDelete.RequestNo) ? "Overtime Request" : _pendingDelete.RequestNo) will be removed.</p>
+                <div class="mg-sheet-actions">
+                    <button type="button" class="mg-sheet-cancel" @onclick="CancelDelete">Cancel</button>
+                    <button type="button" class="mg-sheet-danger" @onclick="ConfirmDeleteAsync">Delete</button>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private readonly List<OvertimeRequestDto> _items = [];
+    private MobilePageRight _rights = MobilePageRight.Denied;
+    private bool _loading = true;
+    private string? _error;
+    private bool _pullArmed;
+    private double _pullStart;
+    private Guid? _openId;
+    private Guid? _dragId;
+    private double _dragStart;
+    private double _dragX;
+    private bool _suppressOpen;
+    private OvertimeRequestDto? _pendingDelete;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _rights = await Rights.GetAsync("80.02");
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            var companyId = Auth.CurrentUser?.ActiveCompanyId ?? 0;
+            var officeId = Auth.CurrentUser?.ActiveOfficeId ?? 0;
+            var personId = Auth.CurrentUser?.PersonId ?? 0;
+            if (companyId <= 0 || officeId <= 0 || personId <= 0)
+            {
+                _error = "Sign in again so company, office, and person are stored in this session.";
+                return;
+            }
+
+            var rows = await Api.GetListAsync();
+            _items.Clear();
+            _items.AddRange(rows.Where(x =>
+                x.CompanyId == companyId &&
+                x.CompanyOfficeId == officeId &&
+                x.PersonId == personId));
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static string Text(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? "-" : value;
+
+    private IEnumerable<FeedGroup> OvertimeGroups
+    {
+        get
+        {
+            var order = new[] { "Today", "Yesterday", "This Week" };
+            return _items
+                .OrderByDescending(item => item.OvertimeDate)
+                .GroupBy(item => Bucket(item.OvertimeDate))
+                .OrderBy(group =>
+                {
+                    var index = Array.IndexOf(order, group.Key);
+                    return index < 0 ? order.Length : index;
+                })
+                .Select(group => new FeedGroup(group.Key, group.ToList()));
+        }
+    }
+
+    private static string Bucket(DateTime date)
+    {
+        var day = date.Date;
+        if (day == DateTime.Today) return "Today";
+        if (day == DateTime.Today.AddDays(-1)) return "Yesterday";
+        if (day >= DateTime.Today.AddDays(-6)) return "This Week";
+        return day.ToString("MMMM yyyy");
+    }
+
+    private static string When(DateTime date)
+    {
+        if (date.Date == DateTime.Today)
+            return date.ToString("hh:mm tt");
+        if (date.Date == DateTime.Today.AddDays(-1))
+            return "Yesterday, " + date.ToString("hh:mm tt");
+        return date.ToString("dd MMM yyyy");
+    }
+
+    private static string Clock(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return "-";
+        return TimeSpan.TryParse(value, out var time)
+            ? time.ToString(@"hh\:mm")
+            : value;
+    }
+
+    private void PullStart(PointerEventArgs e) => _pullStart = e.ClientY;
+
+    private void PullMove(PointerEventArgs e) => _pullArmed = e.ClientY - _pullStart > 72;
+
+    private async Task PullEnd()
+    {
+        if (!_pullArmed)
+            return;
+        _pullArmed = false;
+        await LoadAsync();
+    }
+
+    private void DragStart(PointerEventArgs e, Guid id)
+    {
+        if (!_rights.CanDelete)
+            return;
+        _dragId = id;
+        _dragStart = e.ClientX;
+        _dragX = _openId == id ? -88 : 0;
+        _suppressOpen = false;
+    }
+
+    private void DragMove(PointerEventArgs e)
+    {
+        if (_dragId is null)
+            return;
+        var next = (_openId == _dragId ? -88 : 0) + (e.ClientX - _dragStart);
+        _dragX = Math.Clamp(next, -88, 0);
+        if (Math.Abs(e.ClientX - _dragStart) > 12)
+            _suppressOpen = true;
+    }
+
+    private void DragEnd()
+    {
+        if (_dragId is null)
+            return;
+        _openId = _dragX < -44 ? _dragId : null;
+        _dragId = null;
+        _dragX = 0;
+    }
+
+    private void Open(Guid id)
+    {
+        if (_suppressOpen)
+        {
+            _suppressOpen = false;
+            return;
+        }
+        Nav.NavigateTo($"/overtime-requests/{id}");
+    }
+
+    private void AskDelete(OvertimeRequestDto item)
+    {
+        _pendingDelete = item;
+        _openId = null;
+    }
+
+    private void CancelDelete() => _pendingDelete = null;
+
+    private async Task ConfirmDeleteAsync()
+    {
+        if (_pendingDelete is null)
+            return;
+        var id = _pendingDelete.OvertimeRequestGuid;
+        _pendingDelete = null;
+        try
+        {
+            await Api.DeleteAsync(id, Auth.CurrentUser?.UserId ?? 0);
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private sealed record FeedGroup(string Label, List<OvertimeRequestDto> Items);
+
+}

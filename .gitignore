@@ -1,0 +1,32 @@
+## Build results
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+## Visual Studio / Rider / Android Studio
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.iml
+
+## NuGet
+*.nupkg
+**/packages/*
+!**/packages/build/
+project.lock.json
+artifacts/
+
+## MAUI / Android / iOS
+*.apk
+*.aab
+*.ipa
+*.dSYM/
+*.app/
+
+## OS
+.DS_Store
+Thumbs.db

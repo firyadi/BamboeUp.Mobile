@@ -1,0 +1,102 @@
+@page "/physical-inventory/verify/{CaptureGuid:guid}"
+@layout MobileShellLayout
+@using BamboeUp.Mobile.Shell.Services
+@using Shared.DataTransferObjects
+@inject MobileAuthService Auth
+@inject IPhysicalInventoryApi Api
+@inject NavigationManager Nav
+
+<div class="me-page">
+    @if (_item is null)
+    {
+        <p class="me-status">@(_error ?? "Loading...")</p>
+    }
+    else
+    {
+        <div class="mh-section-head">
+            <div class="mh-section-title"><h2>@_item.DocumentNumber / page @_item.PageNumber</h2></div>
+            <p class="mh-section-sub">@_item.CaptureStatus</p>
+        </div>
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <p class="me-warn">@_error</p>
+        }
+        <div class="me-list">
+            @foreach (var line in _item.Lines)
+            {
+                <div class="me-card">
+                    <h3>@line.Barcode</h3>
+                    <p class="me-status">@(line.ItemCode ?? "unresolved") @line.ItemName</p>
+                    <p class="me-status">Counted @line.CountedQuantity · expected @(line.ExpectedQuantity?.ToString() ?? "-") · variance @(line.Variance?.ToString() ?? "-")</p>
+                </div>
+            }
+        </div>
+        <label class="ml-label">Note</label>
+        <input class="ml-input" @bind="_note" />
+        <div class="me-head-actions">
+            <button type="button" class="me-save" @onclick="VerifyAsync" disabled="@_busy">Verify</button>
+            <button type="button" class="me-refresh" @onclick="RejectAsync" disabled="@_busy">Reject</button>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid CaptureGuid { get; set; }
+    private PhysicalInventoryCaptureDto? _item;
+    private string _note = string.Empty;
+    private bool _busy;
+    private string? _error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _item = await Api.GetCaptureAsync(CaptureGuid);
+        if (_item is null)
+            _error = "Capture was not found.";
+    }
+
+    private async Task VerifyAsync()
+    {
+        if (_item is null) return;
+        _busy = true;
+        try
+        {
+            await Api.VerifyAsync(CaptureGuid, new PhysicalInventoryVerifyRequestDto
+            {
+                ExpectedConcurrencyToken = _item.ConcurrencyToken,
+                Note = _note
+            });
+            Nav.NavigateTo("/physical-inventory/verify");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task RejectAsync()
+    {
+        if (_item is null) return;
+        _busy = true;
+        try
+        {
+            await Api.RejectAsync(CaptureGuid, new PhysicalInventoryVerifyRequestDto
+            {
+                ExpectedConcurrencyToken = _item.ConcurrencyToken,
+                Note = _note
+            });
+            Nav.NavigateTo("/physical-inventory/verify");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+}

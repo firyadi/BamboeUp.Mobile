@@ -1,0 +1,59 @@
+@using BamboeUp.Mobile.OfflineSync
+@implements IDisposable
+@inject IOfflineSyncStore Store
+@inject ISyncCoordinator Coordinator
+
+@if (!_online || _summary.Waiting > 0 || _summary.RequiresAttention > 0)
+{
+    <section class="sync-status @(_summary.RequiresAttention > 0 ? "sync-attention" : null)" aria-live="polite">
+        <span>
+            @if (!_online)
+            {
+                <strong>Offline.</strong>
+            }
+            @if (_summary.Waiting > 0)
+            {
+                <span> @_summary.Waiting change@(_summary.Waiting == 1 ? "" : "s") waiting to sync.</span>
+            }
+            @if (_summary.RequiresAttention > 0)
+            {
+                <span> @_summary.RequiresAttention need@(_summary.RequiresAttention == 1 ? "s" : "") attention.</span>
+            }
+        </span>
+        @if (_online && _summary.Waiting > 0)
+        {
+            <button type="button" @onclick="SyncAsync" disabled="@Coordinator.IsSyncing">
+                @(Coordinator.IsSyncing ? "Syncing..." : "Sync now")
+            </button>
+        }
+    </section>
+}
+
+@code {
+    private SyncQueueSummary _summary = new(0, 0, 0, 0, 0);
+    private bool _online;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Coordinator.StateChanged += OnChanged;
+        Store.Changed += OnChanged;
+        await RefreshAsync();
+    }
+
+    private async Task SyncAsync() => await Coordinator.SyncNowAsync();
+
+    private void OnChanged() => _ = InvokeAsync(RefreshAsync);
+
+    private async Task RefreshAsync()
+    {
+        _online = Coordinator.IsOnline;
+        _summary = await Store.GetSummaryAsync();
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        Coordinator.StateChanged -= OnChanged;
+        Store.Changed -= OnChanged;
+    }
+}

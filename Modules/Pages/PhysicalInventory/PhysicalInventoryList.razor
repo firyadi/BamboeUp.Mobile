@@ -1,0 +1,133 @@
+@page "/physical-inventory"
+@layout MobileShellLayout
+@using BamboeUp.Mobile.Shell.Offline
+@using BamboeUp.Mobile.Shell.Services
+@using Shared.DataTransferObjects
+@inject MobileAuthService Auth
+@inject IPhysicalInventoryLocalStore Store
+@inject NavigationManager Nav
+@implements IDisposable
+
+<div class="me-page">
+    <div class="mh-section-head">
+        <div class="me-head-row">
+            <div class="mh-section-title">
+                <h2>Physical Inventory Count</h2>
+            </div>
+            <div class="me-head-actions">
+                <a class="me-refresh" href="/physical-inventory/sync">Sync</a>
+                @if (Auth.CanCapturePhysicalInventory)
+                {
+                    <button type="button" class="me-new" @onclick="StartNewAsync">New</button>
+                }
+            </div>
+        </div>
+        <p class="mh-section-sub">Stock Opname — capture barcodes offline, then upload for verification.</p>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <p class="me-warn">@_error</p>
+    }
+
+    @if (!Auth.CanCapturePhysicalInventory)
+    {
+        <div class="me-card">
+            <p class="me-status">Unlock with a valid 7-day offline permit to count stock. Payroll and approval stay online-only.</p>
+        </div>
+    }
+    else if (_loading)
+    {
+        <p class="me-status">Loading...</p>
+    }
+    else
+    {
+        @foreach (var group in Groups)
+        {
+            <h3 class="mg-group">@group.Key</h3>
+            <div class="me-list">
+                @foreach (var item in group)
+                {
+                    <a class="me-card" href="@Href(item)">
+                        <h3>@item.DocumentNumber / page @item.PageNumber</h3>
+                        <p class="me-status">@item.Status · @item.LineCount line(s) · qty @item.TotalQuantity</p>
+                        @if (!string.IsNullOrWhiteSpace(item.LastError))
+                        {
+                            <p class="me-warn">@item.LastError</p>
+                        }
+                    </a>
+                }
+            </div>
+        }
+        @if (_items.Count == 0)
+        {
+            <div class="me-card"><p class="me-empty">No count sessions yet.</p></div>
+        }
+    }
+</div>
+
+@code {
+    private readonly List<PhysicalInventorySessionSummary> _items = [];
+    private bool _loading = true;
+    private string? _error;
+
+    private IEnumerable<IGrouping<string, PhysicalInventorySessionSummary>> Groups =>
+        _items.GroupBy(x => Bucket(x.Status)).OrderBy(g => g.Key);
+
+    protected override async Task OnInitializedAsync()
+    {
+        Store.Changed += OnChanged;
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            if (!Auth.CanCapturePhysicalInventory)
+                return;
+            _items.Clear();
+            _items.AddRange(await Store.ListAsync());
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task StartNewAsync()
+    {
+        _error = null;
+        try
+        {
+            await Store.EnsureOpenedAsync();
+            Nav.NavigateTo("/physical-inventory/new");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private static string Bucket(string status) => status switch
+    {
+        PhysicalInventoryStatuses.InProgress => "In Progress",
+        PhysicalInventoryStatuses.PendingUpload or PhysicalInventoryStatuses.Uploading => "Pending Upload",
+        PhysicalInventoryStatuses.Conflict or PhysicalInventoryStatuses.Rejected => "Needs Attention",
+        _ => "Uploaded"
+    };
+
+    private static string Href(PhysicalInventorySessionSummary item) =>
+        string.Equals(item.Status, PhysicalInventoryStatuses.InProgress, StringComparison.OrdinalIgnoreCase)
+            ? $"/physical-inventory/{item.CaptureGuid}"
+            : "/physical-inventory/sync";
+
+    private void OnChanged() => _ = InvokeAsync(LoadAsync);
+    public void Dispose() => Store.Changed -= OnChanged;
+}

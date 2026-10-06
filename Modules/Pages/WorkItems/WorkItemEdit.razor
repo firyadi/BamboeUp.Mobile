@@ -1,0 +1,198 @@
+@page "/work-items/new"
+@page "/work-items/{Id:guid}/edit"
+@layout MobileShellLayout
+@using Microsoft.AspNetCore.Components.Forms
+@using BamboeUp.Mobile.Modules.Services
+@using BamboeUp.Mobile.Shell.Services
+@using Shared.DataTransferObjects
+@inject WorkItemApi Api
+@inject MobileAuthService Auth
+@inject NavigationManager Nav
+
+<div class="me-page">
+    <div class="mh-section-head">
+        <div class="me-head-row">
+            <div class="mh-section-title"><h2>@(IsNew ? "New Work Item" : "Edit Work Item")</h2></div>
+            <a class="me-refresh" href="@(IsNew ? "/work-items" : $"/work-items/{Id}")">Back</a>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <p class="me-status">Loading...</p>
+    }
+    else if (_missing)
+    {
+        <div class="me-card"><p class="me-empty">Work item was not found.</p></div>
+    }
+    else
+    {
+        <div class="me-card me-form">
+            @if (!string.IsNullOrWhiteSpace(_error))
+            {
+                <p class="me-warn">@_error</p>
+            }
+            <label class="me-label">Code</label>
+            <InputText class="me-input" @bind-Value="_form.WorkItemCode" />
+            <label class="me-label">Title</label>
+            <InputText class="me-input" @bind-Value="_form.Title" />
+            <label class="me-label">Module</label>
+            <InputText class="me-input" @bind-Value="_form.Module" />
+            <label class="me-label">Type</label>
+            <InputText class="me-input" @bind-Value="_form.WorkItemType" />
+            <label class="me-label">Owner</label>
+            <InputText class="me-input" @bind-Value="_form.OwnerName" />
+            <label class="me-label">Priority</label>
+            <InputText class="me-input" @bind-Value="_form.Priority" />
+            <label class="me-label">Due Date</label>
+            <InputDate class="me-input" @bind-Value="_form.DueDate" />
+            <label class="me-label">Description</label>
+            <InputText class="me-input" @bind-Value="_form.Description" />
+            <button type="button" class="me-save" @onclick="SaveAsync" disabled="@_saving">Save</button>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private bool IsNew => Id == Guid.Empty;
+    private bool _loading = true;
+    private bool _missing;
+    private bool _saving;
+    private string? _error;
+    private readonly WorkForm _form = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _error = null;
+        _missing = false;
+        if (IsNew)
+        {
+            _form.OwnerUserId = Auth.CurrentUser?.UserId ?? 0;
+            _loading = false;
+            return;
+        }
+
+        try
+        {
+            var item = await Api.GetByIdAsync(Id);
+            if (item is null)
+            {
+                _missing = true;
+                return;
+            }
+
+            _form.WorkItemCode = item.WorkItemCode;
+            _form.Title = item.Title;
+            _form.Module = item.Module;
+            _form.WorkItemType = item.WorkItemType;
+            _form.OwnerName = item.OwnerName;
+            _form.OwnerUserId = item.OwnerUserId;
+            _form.Priority = item.Priority;
+            _form.DueDate = item.DueDate ?? DateTime.Today;
+            _form.HasDueDate = item.DueDate.HasValue;
+            _form.Description = item.Description;
+            _form.WorkflowStatus = item.WorkflowStatus;
+            _form.CompletionPercent = item.CompletionPercent;
+            _form.Tags = item.Tags;
+            _form.Framework = item.Framework;
+            _form.Note = item.Note;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_form.WorkItemCode) || string.IsNullOrWhiteSpace(_form.Title))
+        {
+            _error = "Code and Title are required.";
+            return;
+        }
+
+        _saving = true;
+        _error = null;
+        var userId = Auth.CurrentUser?.UserId ?? 0;
+        try
+        {
+            if (IsNew)
+            {
+                await Api.CreateAsync(new WorkItemForCreationDto
+                {
+                    WorkItemCode = _form.WorkItemCode.Trim(),
+                    Title = _form.Title.Trim(),
+                    Module = Blank(_form.Module),
+                    WorkItemType = Blank(_form.WorkItemType),
+                    OwnerName = Blank(_form.OwnerName),
+                    OwnerUserId = _form.OwnerUserId > 0 ? _form.OwnerUserId : userId,
+                    Priority = Blank(_form.Priority),
+                    DueDate = _form.DueDate,
+                    Description = Blank(_form.Description),
+                    WorkflowStatus = "DRAFT",
+                    CreatedById = userId
+                });
+                Nav.NavigateTo("/work-items");
+            }
+            else
+            {
+                await Api.UpdateAsync(Id, new WorkItemForUpdateDto
+                {
+                    WorkItemGuid = Id,
+                    WorkItemCode = _form.WorkItemCode.Trim(),
+                    Title = _form.Title.Trim(),
+                    Module = Blank(_form.Module),
+                    WorkItemType = Blank(_form.WorkItemType),
+                    OwnerName = Blank(_form.OwnerName),
+                    OwnerUserId = _form.OwnerUserId,
+                    Priority = Blank(_form.Priority),
+                    DueDate = _form.HasDueDate || _form.DueDate != DateTime.Today ? _form.DueDate : null,
+                    Description = Blank(_form.Description),
+                    WorkflowStatus = string.IsNullOrWhiteSpace(_form.WorkflowStatus) ? "DRAFT" : _form.WorkflowStatus,
+                    CompletionPercent = _form.CompletionPercent,
+                    Tags = _form.Tags,
+                    Framework = _form.Framework,
+                    Note = _form.Note,
+                    UpdatedById = userId
+                });
+                Nav.NavigateTo($"/work-items/{Id}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private static string? Blank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private sealed class WorkForm
+    {
+        public string WorkItemCode { get; set; } = "";
+        public string Title { get; set; } = "";
+        public string? Module { get; set; }
+        public string? WorkItemType { get; set; }
+        public string? OwnerName { get; set; }
+        public long OwnerUserId { get; set; }
+        public string? Priority { get; set; }
+        public DateTime DueDate { get; set; } = DateTime.Today;
+        public bool HasDueDate { get; set; }
+        public string? Description { get; set; }
+        public string WorkflowStatus { get; set; } = "DRAFT";
+        public int? CompletionPercent { get; set; }
+        public string? Tags { get; set; }
+        public string? Framework { get; set; }
+        public string? Note { get; set; }
+    }
+}

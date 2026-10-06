@@ -1,0 +1,118 @@
+@page "/physical-inventory/sync"
+@layout MobileShellLayout
+@using BamboeUp.Mobile.Shell.Offline
+@using BamboeUp.Mobile.Shell.Services
+@inject IPhysicalInventoryLocalStore Store
+@inject IPhysicalInventorySyncCoordinator Sync
+@inject MobileAuthService Auth
+@implements IDisposable
+
+<div class="me-page">
+    <div class="mh-section-head">
+        <div class="mh-section-title"><h2>Sync Center</h2></div>
+        <p class="mh-section-sub">Wi-Fi auto-upload for finished pages. Manual upload can use another network after confirmation.</p>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <p class="me-warn">@_error</p>
+    }
+    @if (!string.IsNullOrWhiteSpace(_info))
+    {
+        <p class="me-ok">@_info</p>
+    }
+
+    <div class="me-card">
+        <p class="me-status">Network: @(Sync.IsOnline ? "Online" : "Offline") · @(Sync.IsWifi ? "Wi-Fi" : "Not Wi-Fi")</p>
+        <p class="me-status">In progress @_snapshot.InProgress · pending @_snapshot.PendingUpload · uploaded receipts @_snapshot.Uploaded</p>
+        @if (_snapshot.RequiresAttention > 0)
+        {
+            <p class="me-warn">@_snapshot.RequiresAttention session(s) need attention.</p>
+        }
+        <button type="button" class="me-save" @onclick="UploadWifiAsync" disabled="@Sync.IsSyncing">Upload on Wi-Fi</button>
+        <button type="button" class="me-refresh" @onclick="UploadAnyAsync" disabled="@Sync.IsSyncing">Upload now (confirm)</button>
+    </div>
+
+    <div class="me-list">
+        @foreach (var item in _items)
+        {
+            <div class="me-card">
+                <h3>@item.DocumentNumber / page @item.PageNumber</h3>
+                <p class="me-status">@item.Status</p>
+                @if (!string.IsNullOrWhiteSpace(item.LastError))
+                {
+                    <p class="me-warn">@item.LastError</p>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private PhysicalInventorySyncSnapshot _snapshot = new(0, 0, 0, 0, 0, 0);
+    private List<PhysicalInventorySessionSummary> _items = [];
+    private string? _error;
+    private string? _info;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Store.Changed += OnChanged;
+        Sync.StateChanged += OnChanged;
+        await RefreshAsync();
+    }
+
+    private async Task RefreshAsync()
+    {
+        _snapshot = await Store.GetSnapshotAsync();
+        _items = [.. await Store.ListAsync()];
+        StateHasChanged();
+    }
+
+    private async Task UploadWifiAsync()
+    {
+        _error = null;
+        _info = null;
+        try
+        {
+            if (!Auth.IsOnlineAuthenticated)
+            {
+                _error = "Sign in online to upload.";
+                return;
+            }
+            await Sync.SyncFinishedPagesAsync(wifiOnly: true);
+            _info = "Wi-Fi upload finished.";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private async Task UploadAnyAsync()
+    {
+        _error = null;
+        _info = null;
+        try
+        {
+            if (!Auth.IsOnlineAuthenticated)
+            {
+                _error = "Sign in online to upload.";
+                return;
+            }
+            await Sync.UploadNowAsync(confirmNonWifi: true);
+            _info = "Upload finished.";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private void OnChanged() => _ = InvokeAsync(RefreshAsync);
+
+    public void Dispose()
+    {
+        Store.Changed -= OnChanged;
+        Sync.StateChanged -= OnChanged;
+    }
+}

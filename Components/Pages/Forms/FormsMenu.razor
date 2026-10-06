@@ -1,0 +1,18 @@
+@page "/forms"
+@layout MobileShellLayout
+
+<div class="me-page">
+    <div class="mh-section-head">
+        <div class="mh-section-title"><h2>Form</h2></div>
+        <p class="mh-section-sub">Standard forms. Mobile-01 to Mobile-10.</p>
+    </div>
+    <div class="me-list">
+        @foreach (var item in FormCatalog.All)
+        {
+            <a class="me-card" href="@item.Href">
+                <h3>@item.Code. @item.Title</h3>
+                <p class="me-status">@item.Table</p>
+            </a>
+        }
+    </div>
+</div>

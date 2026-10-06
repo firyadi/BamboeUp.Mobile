@@ -1,0 +1,334 @@
+/* ── Mobile home shell + dashboard (mockup-identical) ─────── */
+
+.mh-shell {
+    min-height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    background: #000;
+    color: #f5f5f5;
+    font-family: "Segoe UI", system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.mh-top {
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: calc(10px + env(safe-area-inset-top, 0px)) 16px 10px;
+    background: rgba(0, 0, 0, 0.92);
+    backdrop-filter: blur(8px);
+}
+
+.mh-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.mh-brand-logo {
+    width: 34px;
+    height: auto;
+    object-fit: contain;
+    display: block;
+}
+
+.mh-brand-name {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+}
+
+.mh-brand-sub {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: #e07030;
+    line-height: 1.1;
+    margin-top: 1px;
+}
+
+.mh-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 1.5px solid #d4a84a;
+    background: #121212;
+    color: #fff;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    padding: 0;
+}
+
+.mh-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 14px calc(72px + env(safe-area-inset-bottom, 0px));
+    -webkit-overflow-scrolling: touch;
+}
+
+.mh-nav {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 30;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    align-items: center;
+    height: calc(64px + env(safe-area-inset-bottom, 0px));
+    padding: 6px 4px env(safe-area-inset-bottom, 0px);
+    background: #0a0a0a;
+    border-top: 1px solid #1c1c1c;
+}
+
+.mh-nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    color: #8a8a8a;
+    font-size: 0.68rem;
+    font-weight: 500;
+    text-decoration: none;
+    background: none;
+    border: none;
+    padding: 4px 2px;
+    cursor: pointer;
+}
+
+.mh-nav-item.active {
+    color: #d4a84a;
+}
+
+.mh-nav-ico {
+    display: grid;
+    place-items: center;
+    height: 24px;
+}
+
+.mh-nav-btn {
+    font-family: inherit;
+}
+
+/* ── Home content ─────────────────────────────────────────── */
+
+.mh-home {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    padding-top: 4px;
+}
+
+.mh-section-head {
+    margin-bottom: 10px;
+}
+
+.mh-section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: #d4a84a;
+}
+
+.mh-section-title h2 {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #d4a84a;
+    letter-spacing: -0.01em;
+}
+
+.mh-section-ico {
+    display: grid;
+    place-items: center;
+    color: #d4a84a;
+}
+
+.mh-section-sub {
+    margin: 4px 0 0;
+    padding-left: 26px;
+    font-size: 0.78rem;
+    color: #8f8f8f;
+}
+
+.mh-grid {
+    display: grid;
+    gap: 10px;
+}
+
+.mh-grid-3 {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.mh-grid-4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.mh-tile {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    gap: 6px;
+    padding: 14px 8px 12px;
+    border-radius: 14px;
+    border: 1px solid #1e1e1e;
+    background: #141414;
+    color: inherit;
+    cursor: pointer;
+    font-family: inherit;
+    min-width: 0;
+    transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.mh-tile:active {
+    background: #1a1a1a;
+    border-color: #2a2a2a;
+}
+
+.mh-tile-sm {
+    padding: 12px 4px 10px;
+    gap: 5px;
+}
+
+.mh-tile-ico {
+    display: grid;
+    place-items: center;
+    height: 32px;
+    margin-bottom: 2px;
+}
+
+.mh-tile-ico.tone-gold {
+    color: #e8b84a;
+    background: linear-gradient(180deg, #FFB800, #FF4D00);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.mh-tile-ico.tone-gold svg {
+    stroke: #e07030;
+    color: #e07030;
+}
+
+.mh-tile-ico.tone-orange svg {
+    stroke: #e53935;
+    color: #e53935;
+}
+
+.mh-tile-ico.tone-gold svg,
+.mh-tile-ico.tone-orange svg {
+    -webkit-text-fill-color: initial;
+}
+
+.mh-tile-title {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1.2;
+    word-break: break-word;
+}
+
+.mh-tile-sm .mh-tile-title {
+    font-size: 0.68rem;
+}
+
+.mh-tile-sub {
+    font-size: 0.62rem;
+    color: #8a8a8a;
+    line-height: 1.25;
+    word-break: break-word;
+}
+
+.mh-tile-sm .mh-tile-sub {
+    font-size: 0.58rem;
+}
+
+/* Banner */
+.mh-banner {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    text-align: left;
+    padding: 14px 14px;
+    border-radius: 14px;
+    border: 1px solid rgba(212, 168, 74, 0.45);
+    background: #121212;
+    color: inherit;
+    cursor: pointer;
+    font-family: inherit;
+    margin-top: 2px;
+}
+
+.mh-banner-bolt {
+    position: relative;
+    width: 48px;
+    height: 48px;
+    display: grid;
+    place-items: center;
+}
+
+.mh-bolt-circle {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 1.5px solid #d4a84a;
+    background: rgba(212, 168, 74, 0.08);
+    color: #d4a84a;
+    display: grid;
+    place-items: center;
+}
+
+.mh-spark {
+    position: absolute;
+    width: 4px;
+    height: 4px;
+    background: #d4a84a;
+    border-radius: 50%;
+    box-shadow: 0 0 4px rgba(212, 168, 74, 0.8);
+}
+
+.mh-spark.s1 { top: 2px; left: 10px; }
+.mh-spark.s2 { top: 6px; right: 4px; width: 3px; height: 3px; }
+.mh-spark.s3 { bottom: 6px; left: 4px; width: 3px; height: 3px; }
+.mh-spark.s4 { bottom: 2px; right: 10px; }
+
+.mh-banner-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.mh-banner-title {
+    font-size: 0.95rem;
+    font-weight: 700;
+    color: #d4a84a;
+}
+
+.mh-banner-sub {
+    font-size: 0.72rem;
+    color: #cfcfcf;
+    line-height: 1.35;
+}
+
+.mh-banner-arrow {
+    color: #d4a84a;
+    display: grid;
+    place-items: center;
+}
+
+@media (max-width: 360px) {
+    .mh-tile-title { font-size: 0.7rem; }
+    .mh-tile-sm .mh-tile-title { font-size: 0.62rem; }
+    .mh-section-title h2 { font-size: 0.95rem; }
+}

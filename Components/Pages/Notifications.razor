@@ -1,0 +1,81 @@
+@page "/notifications"
+@layout BamboeUp.Mobile.Components.Layout.MobileShellLayout
+
+<div class="page-pad">
+    <h1 class="mg-page-title">Notifications</h1>
+
+    <div class="mg-filters" role="tablist">
+        @foreach (var chip in Filters)
+        {
+            <button type="button"
+                    class="mg-chip @(chip == _filter ? "active" : null)"
+                    @onclick="() => _filter = chip">@chip</button>
+        }
+    </div>
+
+    @foreach (var group in VisibleGroups)
+    {
+        <h2 class="mg-group">@group.Key</h2>
+        <div class="mg-list">
+            @foreach (var item in group)
+            {
+                <article class="mg-row">
+                    <span class="mg-ico @item.Tone" aria-hidden="true">@((MarkupString)item.Icon)</span>
+                    <span class="mg-copy">
+                        <span class="mg-title">@item.Title</span>
+                        <span class="mg-sub">@item.Body</span>
+                    </span>
+                    <span class="mg-meta">
+                        <span class="mg-time">@item.When</span>
+                        <span class="mg-dot @(item.Unread ? "unread" : null)"></span>
+                    </span>
+                </article>
+            }
+        </div>
+    }
+
+    @if (!VisibleGroups.Any())
+    {
+        <p class="mg-empty">No notifications in this filter.</p>
+    }
+</div>
+
+@code {
+    private static readonly string[] Filters = ["All", "Unread", "System", "Request", "Reminder"];
+    private static readonly string[] GroupOrder = ["Today", "Yesterday", "This Week"];
+
+    private string _filter = "All";
+
+    private IEnumerable<IGrouping<string, Notice>> VisibleGroups =>
+        Items
+            .Where(Matches)
+            .GroupBy(item => item.Group)
+            .OrderBy(group => Array.IndexOf(GroupOrder, group.Key));
+
+    private bool Matches(Notice item) => _filter switch
+    {
+        "Unread" => item.Unread,
+        "System" or "Request" or "Reminder" => item.Kind == _filter,
+        _ => true
+    };
+
+    private static readonly Notice[] Items =
+    [
+        new("Leave Request Approved", "Your leave request on 20 May 2025 has been approved.", "09:30 AM", "Today", "Request", true, "tone-alert", CalendarIcon),
+        new("Check-in Reminder", "Don't forget to check-in. You haven't checked in today.", "09:00 AM", "Today", "Reminder", true, "", FingerprintIcon),
+        new("Overtime Request Update", "Your overtime request on 16 May 2025 is pending approval.", "08:45 AM", "Today", "Request", true, "tone-alert", OvertimeIcon),
+        new("Schedule Update", "Your schedule on 17 May 2025 has been updated.", "Yesterday, 05:30 PM", "Yesterday", "System", false, "", CalendarIcon),
+        new("Document Uploaded", "Payroll Summary - April 2025 has been uploaded.", "Yesterday, 03:15 PM", "Yesterday", "System", false, "", DocumentIcon),
+        new("Company Announcement", "Don't miss our town hall meeting on 20 May 2025 at 10:00 AM.", "Yesterday, 10:00 AM", "Yesterday", "System", false, "", MegaphoneIcon),
+        new("Task Assignment", "You have a new task: Monthly Report - April 2025.", "14 May 2025, 11:20 AM", "This Week", "Request", false, "tone-alert", TaskIcon)
+    ];
+
+    private const string CalendarIcon = """<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="4" y="5" width="16" height="15" rx="2"/><path d="M8 3v4M16 3v4M4 10h16"/></svg>""";
+    private const string FingerprintIcon = """<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M12 11a3 3 0 1 0-3-3"/><path d="M7 19c.6-2.4 2.2-4 5-4s4.4 1.6 5 4"/><path d="M12 3v2M8 5.2 9 6.6M16 5.2 15 6.6"/></svg>""";
+    private const string OvertimeIcon = """<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>""";
+    private const string DocumentIcon = """<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M7 3h7l5 5v13a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v6h6M8 13h8M8 17h6"/></svg>""";
+    private const string MegaphoneIcon = """<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M4 10v4h3l6 4V6L7 10H4z"/><path d="M17 9a4 4 0 0 1 0 6"/></svg>""";
+    private const string TaskIcon = """<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="5" y="4" width="14" height="16" rx="2"/><path d="m8 12 2.2 2.2L16 9"/></svg>""";
+
+    private sealed record Notice(string Title, string Body, string When, string Group, string Kind, bool Unread, string Tone, string Icon);
+}

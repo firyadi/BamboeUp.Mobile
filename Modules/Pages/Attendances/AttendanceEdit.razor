@@ -1,0 +1,89 @@
+@page "/attendances/new"
+@page "/attendances/{Id:guid}"
+@layout MobileShellLayout
+@using BamboeUp.Mobile.Modules.Services
+@using BamboeUp.Mobile.Shell.Services
+@using Shared.DataTransferObjects
+@inject AttendanceApi Api
+@inject MobileAuthService Auth
+@inject NavigationManager Nav
+
+<div class="me-page">
+    <div class="mh-section-head">
+        <div class="me-head-row">
+            <div class="mh-section-title"><h2>Attendance</h2></div>
+            <a class="me-refresh" href="/attendances">Back</a>
+        </div>
+    </div>
+    @if (_loading)
+    {
+        <p class="me-status">Loading...</p>
+    }
+    else if (_model is null)
+    {
+        <div class="me-card"><p>@(string.IsNullOrWhiteSpace(_error) ? "Record not found." : _error)</p></div>
+    }
+    else
+    {
+        <article class="mg-row">
+            <span class="mg-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7">
+                    <path d="M12 11a3 3 0 1 0-3-3"/><path d="M7 19c.6-2.4 2.2-4 5-4s4.4 1.6 5 4"/>
+                </svg>
+            </span>
+            <span class="mg-copy">
+                <span class="mg-title">@_model.AttendanceDate.ToString("dd MMM yyyy")</span>
+                <span class="mg-sub">Check in @(_model.CheckinTime?.ToString("dd MMM yyyy HH:mm") ?? "-"). Check out @(_model.CheckOutTime?.ToString("dd MMM yyyy HH:mm") ?? "-").</span>
+            </span>
+            <span class="mg-meta">
+                <span class="mg-time">@(_model.CheckinTime?.ToString("hh:mm tt") ?? "-")</span>
+                <span class="mg-dot @(_model.CheckOutTime is null ? "unread" : null)"></span>
+            </span>
+        </article>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+    private AttendanceDto? _model;
+    private bool _loading = true;
+    private string? _error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var path = Nav.ToBaseRelativePath(Nav.Uri).Split('?', '#')[0].Trim('/');
+        if (path.Equals("attendances/new", StringComparison.OrdinalIgnoreCase))
+        {
+            Nav.NavigateTo("/attendances", replace: true);
+            return;
+        }
+
+        _loading = true;
+        _error = null;
+        try
+        {
+            _model = await Api.GetByIdAsync(Id);
+            var companyId = Auth.CurrentUser?.ActiveCompanyId ?? 0;
+            var officeId = Auth.CurrentUser?.ActiveOfficeId ?? 0;
+            var personId = Auth.CurrentUser?.PersonId ?? 0;
+            if (_model is not null && (companyId <= 0 || officeId <= 0 || personId <= 0
+                || _model.CompanyId != companyId
+                || _model.CompanyOfficeId != officeId
+                || _model.PersonId != personId))
+            {
+                _model = null;
+                _error = companyId <= 0 || officeId <= 0 || personId <= 0
+                    ? "Sign in again so company, office, and person are stored in this session."
+                    : "This record is not for your signed-in company, office, and person.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+}

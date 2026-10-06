@@ -1,0 +1,106 @@
+@page "/holidays"
+@layout MobileShellLayout
+@using BamboeUp.Mobile.Modules.Services
+@using Shared.DataTransferObjects
+@inject HolidayApi Api
+
+<div class="me-page">
+    <div class="mh-section-head">
+        <div class="me-head-row">
+            <div class="mh-section-title"><h2>Holiday</h2></div>
+            <div class="me-head-actions">
+                <a class="me-refresh" href="/forms">Form</a>
+                <a class="me-new" href="@($"/holidays/day/{DateTime.Today:yyyy-MM-dd}")">Today</a>
+            </div>
+        </div>
+        <p class="mh-section-sub">Mobile-06. Calendar</p>
+    </div>
+
+    <div class="me-card">
+        <div class="me-head-row">
+            <button type="button" class="me-refresh" @onclick="Previous">Prev</button>
+            <h3>@_cursor.ToString("MMMM yyyy")</h3>
+            <button type="button" class="me-refresh" @onclick="Next">Next</button>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(_error))
+    {
+        <p class="me-warn">@_error</p>
+    }
+
+    <div class="me-cal-grid">
+        @foreach (var name in _days)
+        {
+            <div class="me-cal-dow">@name</div>
+        }
+        @foreach (var cell in Cells())
+        {
+            var names = Names(cell.Date);
+            <a class="me-cal-day @(cell.InMonth ? "" : "outside") @(names.Count > 0 ? "marked" : "")" href="@($"/holidays/day/{cell.Date:yyyy-MM-dd}")">
+                <span>@cell.Date.Day</span>
+                @foreach (var name in names.Take(2))
+                {
+                    <span class="me-cal-name">@name</span>
+                }
+            </a>
+        }
+    </div>
+</div>
+
+@code {
+    private static readonly string[] _days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    private DateTime _cursor = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private readonly List<CalendarEventDto> _events = [];
+    private string? _error;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task Previous()
+    {
+        _cursor = _cursor.AddMonths(-1);
+        await LoadAsync();
+    }
+
+    private async Task Next()
+    {
+        _cursor = _cursor.AddMonths(1);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        _error = null;
+        var start = StartOfGrid(_cursor);
+        var end = start.AddDays(42);
+        try
+        {
+            _events.Clear();
+            _events.AddRange(await Api.GetEventsAsync(start, end));
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    private static DateTime StartOfGrid(DateTime month)
+    {
+        var first = new DateTime(month.Year, month.Month, 1);
+        var offset = ((int)first.DayOfWeek + 6) % 7;
+        return first.AddDays(-offset);
+    }
+
+    private IEnumerable<(DateTime Date, bool InMonth)> Cells()
+    {
+        var start = StartOfGrid(_cursor);
+        for (var i = 0; i < 42; i++)
+        {
+            var date = start.AddDays(i);
+            yield return (date, date.Month == _cursor.Month);
+        }
+    }
+
+    private List<string> Names(DateTime date) =>
+        _events.Where(item => item.Start.Date == date.Date).Select(item => item.Title).ToList();
+}

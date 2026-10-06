@@ -1,0 +1,335 @@
+@page "/payroll-runs/{Id:guid}"
+@layout MobileShellLayout
+@implements IAsyncDisposable
+@using Microsoft.AspNetCore.Components.Forms
+@using BamboeUp.Mobile.Modules.Services
+@using BamboeUp.Mobile.Shell.Services
+@using Shared.DataTransferObjects
+@using Shared.Helpers
+@inject PayrollRunApi Api
+@inject MobileAuthService Auth
+
+<div class="me-page">
+    <div class="mh-section-head">
+        <div class="me-head-row">
+            <div class="mh-section-title"><h2>@(_definition?.ProcessName ?? "Process")</h2></div>
+            <a class="me-refresh" href="/payroll-runs">Back</a>
+        </div>
+        <p class="mh-section-sub">@(_execution?.Status ?? "Ready")</p>
+    </div>
+
+    @if (_loading)
+    {
+        <p class="me-status">Loading...</p>
+    }
+    else if (_definition is null)
+    {
+        <div class="me-card"><p class="me-empty">@_error ?? "Process was not found."</p></div>
+    }
+    else
+    {
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <p class="me-warn">@_error</p>
+        }
+        @if (!string.IsNullOrWhiteSpace(_ok))
+        {
+            <p class="me-ok">@_ok</p>
+        }
+
+        <div class="me-card me-form">
+            @foreach (var row in _rows)
+            {
+                <label class="me-label">@row.Label</label>
+                @if (row.ControlType == "CheckBox")
+                {
+                    <InputCheckbox @bind-Value="row.Flag" />
+                }
+                else if (row.ControlType is "DatePicker" or "DateTimePicker")
+                {
+                    <InputDate class="me-input" @bind-Value="row.Date" />
+                }
+                else
+                {
+                    <InputText class="me-input" @bind-Value="row.Text" />
+                }
+            }
+            <div class="me-head-actions">
+                <button type="button" class="me-refresh" @onclick="ValidateAsync" disabled="@_busy">Validate</button>
+                <button type="button" class="me-save" @onclick="RunAsync" disabled="@_busy">Run</button>
+            </div>
+        </div>
+
+        @if (_execution is not null)
+        {
+            <div class="me-card">
+                <header class="me-card-top"><h3>@_execution.ExecutionNo</h3></header>
+                <div class="me-progress"><span style="width:@($"{_execution.ProgressPercent}%")"></span></div>
+                <dl>
+                    <div><dt>Status</dt><dd>@_execution.Status</dd></div>
+                    <div><dt>Step</dt><dd>@Show(_execution.CurrentStepCode)</dd></div>
+                </dl>
+                <div class="me-head-actions">
+                    @if (_canCancel)
+                    {
+                        <button type="button" class="me-refresh" @onclick="CancelAsync" disabled="@_busy">Cancel</button>
+                    }
+                    <a class="me-new" href="@($"/payroll-runs/executions/{_execution.ProcessExecutionGuid}")">Result</a>
+                </div>
+            </div>
+        }
+
+        <div class="me-list">
+            @foreach (var step in Steps())
+            {
+                <div class="me-card">
+                    <h3>@step.Name</h3>
+                    <p class="me-status">@step.Status</p>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private ProcessDefinitionDto? _definition;
+    private ProcessExecutionDto? _execution;
+    private ParameterSchemaDto _schema = new();
+    private readonly List<ParamRow> _rows = [];
+    private bool _loading = true;
+    private bool _busy;
+    private string? _error;
+    private string? _ok;
+    private PeriodicTimer? _timer;
+    private CancellationTokenSource? _poll;
+
+    private bool _canCancel =>
+        _execution is not null && _definition?.AllowCancel == true
+        && _execution.Status is "Queued" or "Running" or "WaitingApproval";
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _error = null;
+        _ok = null;
+        try
+        {
+            _definition = await Api.GetDefinitionAsync(Id);
+            if (_definition is null)
+                return;
+
+            _schema = ParameterFormAdapter.FromProcess(_definition.Parameters, _definition.ProcessCode, layoutColumns: 1);
+            _rows.Clear();
+            var userId = Auth.CurrentUser?.UserId ?? 0;
+            foreach (var field in _schema.Fields.Where(item => item.IsVisible).OrderBy(item => item.SortOrder))
+            {
+                var row = new ParamRow
+                {
+                    Code = field.ParameterCode,
+                    Label = string.IsNullOrWhiteSpace(field.DisplayLabel) ? field.ParameterCode : field.DisplayLabel,
+                    ControlType = field.ControlType,
+                    Required = field.IsRequired,
+                    Text = field.DefaultValue ?? ""
+                };
+                if (field.ControlType == "CheckBox")
+                    row.Flag = field.DefaultValue is "true" or "1";
+                if (field.ParameterCode.Equals("CreatedById", StringComparison.OrdinalIgnoreCase) && userId > 0)
+                    row.Text = userId.ToString();
+                _rows.Add(row);
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private IEnumerable<(string Name, string Status)> Steps()
+    {
+        if (_execution?.Steps is { Count: > 0 })
+            return _execution.Steps.Select(step => (step.StepName, step.Status));
+        return (_definition?.Steps ?? []).OrderBy(step => step.ExecutionOrder).Select(step => (step.StepName, "Ready"));
+    }
+
+    private bool TryValues(out Dictionary<string, object?> values)
+    {
+        values = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in _rows)
+        {
+            if (row.ControlType == "CheckBox")
+                values[row.Code] = row.Flag;
+            else if (row.ControlType is "DatePicker" or "DateTimePicker")
+                values[row.Code] = row.Date;
+            else
+                values[row.Code] = string.IsNullOrWhiteSpace(row.Text) ? null : row.Text.Trim();
+        }
+
+        if (!ParameterFormAdapter.TryValidateRequired(_schema, values, out var message))
+        {
+            _error = message;
+            _ok = null;
+            return false;
+        }
+
+        return true;
+    }
+
+    private ProcessExecuteRequestDto Request()
+    {
+        var values = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in _rows)
+        {
+            if (row.ControlType == "CheckBox")
+                values[row.Code] = row.Flag;
+            else if (row.ControlType is "DatePicker" or "DateTimePicker")
+                values[row.Code] = row.Date;
+            else
+                values[row.Code] = string.IsNullOrWhiteSpace(row.Text) ? null : row.Text.Trim();
+        }
+
+        long? companyId = null;
+        if (values.TryGetValue("CompanyId", out var company) && long.TryParse(company?.ToString(), out var parsed))
+            companyId = parsed;
+
+        return new ProcessExecuteRequestDto
+        {
+            Parameters = ParameterFormAdapter.ToProcessParameterValues(_schema, values),
+            CompanyId = companyId
+        };
+    }
+
+    private async Task ValidateAsync()
+    {
+        _error = null;
+        _ok = null;
+        if (!TryValues(out _))
+            return;
+
+        _busy = true;
+        try
+        {
+            var result = await Api.ValidateAsync(Id, new ProcessValidateRequestDto { Parameters = Request().Parameters });
+            if (result.IsValid)
+                _ok = "Validation passed.";
+            else
+                _error = string.Join("; ", result.Messages.Select(item => item.Message));
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task RunAsync()
+    {
+        _error = null;
+        _ok = null;
+        if (!TryValues(out _))
+            return;
+
+        _busy = true;
+        try
+        {
+            _execution = await Api.ExecuteAsync(Id, Request());
+            _ok = $"Execution {_execution.ExecutionNo} started.";
+            StartPolling();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+            _busy = false;
+        }
+    }
+
+    private async Task CancelAsync()
+    {
+        if (_execution is null)
+            return;
+        _busy = true;
+        _error = null;
+        try
+        {
+            await Api.CancelAsync(_execution.ProcessExecutionGuid);
+            _execution = await Api.GetExecutionAsync(_execution.ProcessExecutionGuid);
+            _ok = "Cancellation requested.";
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private void StartPolling()
+    {
+        _poll?.Cancel();
+        _poll?.Dispose();
+        _timer?.Dispose();
+        _poll = new CancellationTokenSource();
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(2));
+        _ = PollAsync(_poll.Token);
+    }
+
+    private async Task PollAsync(CancellationToken token)
+    {
+        if (_execution is null || _timer is null)
+            return;
+        try
+        {
+            while (await _timer.WaitForNextTickAsync(token))
+            {
+                var latest = await Api.GetExecutionAsync(_execution.ProcessExecutionGuid, token);
+                if (latest is null)
+                    break;
+                _execution = latest;
+                await InvokeAsync(StateHasChanged);
+                if (latest.Status is "Completed" or "CompletedWithWarning" or "Failed" or "Cancelled" or "Rejected")
+                    break;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        finally
+        {
+            _busy = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_poll is not null)
+        {
+            await _poll.CancelAsync();
+            _poll.Dispose();
+        }
+        _timer?.Dispose();
+    }
+
+    private static string Show(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
+
+    private sealed class ParamRow
+    {
+        public string Code { get; set; } = "";
+        public string Label { get; set; } = "";
+        public string ControlType { get; set; } = "TextBox";
+        public bool Required { get; set; }
+        public string Text { get; set; } = "";
+        public bool Flag { get; set; }
+        public DateTime Date { get; set; } = DateTime.Today;
+    }
+}

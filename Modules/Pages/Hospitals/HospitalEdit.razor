@@ -1,0 +1,187 @@
+@page "/hospitals/new"
+@page "/hospitals/{Id:guid}"
+@layout MobileShellLayout
+@using Microsoft.AspNetCore.Components.Forms
+@using BamboeUp.Mobile.Modules.Services
+@using BamboeUp.Mobile.Shell.Services
+@using Shared.DataTransferObjects
+@inject HospitalApi Api
+@inject MobileAuthService Auth
+@inject NavigationManager Nav
+
+<div class="me-page">
+    <div class="mh-section-head">
+        <div class="me-head-row">
+            <div class="mh-section-title"><h2>@(IsNew ? "New Hospital" : "Hospital")</h2></div>
+            <a class="me-refresh" href="/hospitals">Back</a>
+        </div>
+        <p class="mh-section-sub">Mobile-01. 1 Table</p>
+    </div>
+
+    @if (_loading)
+    {
+        <p class="me-status">Loading...</p>
+    }
+    else if (!IsNew && _missing)
+    {
+        <div class="me-card"><p class="me-empty">Hospital was not found.</p></div>
+    }
+    else
+    {
+        <div class="me-card me-form">
+            @if (!string.IsNullOrWhiteSpace(_error))
+            {
+                <p class="me-warn">@_error</p>
+            }
+            <label class="me-label" for="hospital-name">Hospital Name</label>
+            <InputText id="hospital-name" class="me-input" @bind-Value="_form.HospitalName" />
+            <label class="me-label" for="hospital-code">Hospital Code</label>
+            <InputText id="hospital-code" class="me-input" @bind-Value="_form.HospitalCode" />
+            <label class="me-label" for="hospital-short">Short Name</label>
+            <InputText id="hospital-short" class="me-input" @bind-Value="_form.ShortName" />
+            <label class="me-label" for="hospital-license">License No</label>
+            <InputText id="hospital-license" class="me-input" @bind-Value="_form.LicenseNo" />
+            <label class="me-label" for="hospital-type">Hospital Type</label>
+            <InputText id="hospital-type" class="me-input" @bind-Value="_form.HospitalType" />
+            <label class="me-label" for="hospital-class">Hospital Class</label>
+            <InputText id="hospital-class" class="me-input" @bind-Value="_form.HospitalClass" />
+            <label class="me-label" for="hospital-phone">Phone No</label>
+            <InputText id="hospital-phone" class="me-input" @bind-Value="_form.PhoneNo" />
+            <label class="me-label" for="hospital-email">Email</label>
+            <InputText id="hospital-email" class="me-input" @bind-Value="_form.Email" />
+            <label class="me-label" for="hospital-website">Website</label>
+            <InputText id="hospital-website" class="me-input" @bind-Value="_form.Website" />
+            <button type="button" class="me-save" @onclick="SaveAsync" disabled="@_saving">Save</button>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private bool IsNew => Id == Guid.Empty;
+    private bool _loading = true;
+    private bool _saving;
+    private bool _missing;
+    private string? _error;
+    private byte[]? _rowVersion;
+    private readonly HospitalForm _form = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _error = null;
+        _missing = false;
+        if (IsNew)
+        {
+            _loading = false;
+            return;
+        }
+
+        try
+        {
+            var item = await Api.GetByIdAsync(Id);
+            if (item is null)
+            {
+                _missing = true;
+                return;
+            }
+
+            _form.HospitalName = item.HospitalName;
+            _form.HospitalCode = item.HospitalCode;
+            _form.ShortName = item.ShortName;
+            _form.LicenseNo = item.LicenseNo;
+            _form.HospitalType = item.HospitalType;
+            _form.HospitalClass = item.HospitalClass;
+            _form.PhoneNo = item.PhoneNo;
+            _form.Email = item.Email;
+            _form.Website = item.Website;
+            _rowVersion = item.RowVersion;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_form.HospitalName))
+        {
+            _error = "Hospital Name is required.";
+            return;
+        }
+
+        _saving = true;
+        _error = null;
+        try
+        {
+            var userId = Auth.CurrentUser?.UserId ?? 0;
+            if (IsNew)
+            {
+                await Api.CreateAsync(new HospitalForCreationDto
+                {
+                    HospitalName = _form.HospitalName.Trim(),
+                    HospitalCode = Blank(_form.HospitalCode),
+                    ShortName = Blank(_form.ShortName),
+                    LicenseNo = Blank(_form.LicenseNo),
+                    HospitalType = Blank(_form.HospitalType),
+                    HospitalClass = Blank(_form.HospitalClass),
+                    PhoneNo = Blank(_form.PhoneNo),
+                    Email = Blank(_form.Email),
+                    Website = Blank(_form.Website),
+                    CreatedById = userId,
+                    StatusId = 1
+                });
+            }
+            else
+            {
+                await Api.UpdateAsync(Id, new HospitalForUpdateDto
+                {
+                    HospitalName = _form.HospitalName.Trim(),
+                    HospitalCode = Blank(_form.HospitalCode),
+                    ShortName = Blank(_form.ShortName),
+                    LicenseNo = Blank(_form.LicenseNo),
+                    HospitalType = Blank(_form.HospitalType),
+                    HospitalClass = Blank(_form.HospitalClass),
+                    PhoneNo = Blank(_form.PhoneNo),
+                    Email = Blank(_form.Email),
+                    Website = Blank(_form.Website),
+                    UpdatedById = userId,
+                    StatusId = 1,
+                    RowVersion = _rowVersion
+                });
+            }
+
+            Nav.NavigateTo("/hospitals");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private static string? Blank(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private sealed class HospitalForm
+    {
+        public string HospitalName { get; set; } = "";
+        public string? HospitalCode { get; set; }
+        public string? ShortName { get; set; }
+        public string? LicenseNo { get; set; }
+        public string? HospitalType { get; set; }
+        public string? HospitalClass { get; set; }
+        public string? PhoneNo { get; set; }
+        public string? Email { get; set; }
+        public string? Website { get; set; }
+    }
+}

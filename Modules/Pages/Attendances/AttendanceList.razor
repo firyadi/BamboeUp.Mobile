@@ -1,0 +1,271 @@
+@page "/attendances"
+@layout MobileShellLayout
+@using BamboeUp.Mobile.Modules.Services
+@using BamboeUp.Mobile.OfflineSync
+@using BamboeUp.Mobile.Shell.Device
+@using BamboeUp.Mobile.Shell.Services
+@using Shared.DataTransferObjects
+@inject AttendanceApi Api
+@inject MobileAuthService Auth
+@inject IDeviceServices Device
+@inject AttendanceOfflineQueue OfflineQueue
+@inject IOfflineSyncStore OfflineStore
+@inject ISyncCoordinator SyncCoordinator
+@inject NavigationManager Nav
+
+<div class="me-page">
+    <div class="mh-section-head" @onpointerdown="PullStart" @onpointermove="PullMove" @onpointerup="PullEnd" @onpointercancel="PullEnd">
+        <div class="me-head-row">
+            <div class="mh-section-title"><h2>Attendance</h2></div>
+            <div class="me-head-actions">
+                <button type="button" class="me-refresh" @onclick="LoadAsync" disabled="@_loading">Refresh</button>
+            </div>
+        </div>
+        @if (_pullArmed)
+        {
+            <p class="mg-pull">Release to refresh</p>
+        }
+    </div>
+
+    @if (_loading)
+    {
+        <p class="me-status">Loading...</p>
+    }
+    else
+    {
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <p class="me-warn">@_error</p>
+        }
+        <div class="me-card">
+            <h3>Punch</h3>
+            <p class="me-status">Check in: @(_today?.CheckinTime?.ToString("HH:mm") ?? "-")</p>
+            <p class="me-status">Check out: @(_today?.CheckOutTime?.ToString("HH:mm") ?? "-")</p>
+            @if (_pendingPunches.Count > 0)
+            {
+                <p class="me-warn">@_pendingPunches.Count attendance event@(_pendingPunches.Count == 1 ? "" : "s") saved securely and waiting to sync.</p>
+            }
+            @if (_today?.CheckOutTime != null || HasPendingCheckOut)
+            {
+                <p class="me-ok">@(_today?.CheckOutTime != null ? "Done" : "Check out saved")</p>
+            }
+            else if (_today?.CheckinTime != null || HasPendingCheckIn)
+            {
+                <button type="button" class="me-save" @onclick="() => PunchAsync(false)" disabled="@_punching">Check out</button>
+            }
+            else
+            {
+                <button type="button" class="me-save" @onclick="() => PunchAsync(true)" disabled="@_punching">Check in</button>
+            }
+        </div>
+        <div class="mg-list">
+            @foreach (var group in AttendanceGroups)
+            {
+                <h2 class="mg-group">@group.Label</h2>
+                @foreach (var item in group.Items)
+                {
+                    var openShift = item.CheckOutTime is null;
+                    <a class="mg-row" href="@($"/attendances/{item.AttendanceGuid}")" @onclick="() => OpenAttendance(item.AttendanceGuid)" @onclick:preventDefault>
+                        <span class="mg-ico @(openShift ? "tone-alert" : null)" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7">
+                                <path d="M12 11a3 3 0 1 0-3-3"/><path d="M7 19c.6-2.4 2.2-4 5-4s4.4 1.6 5 4"/><path d="M12 3v2M8 5.2 9 6.6M16 5.2 15 6.6"/>
+                            </svg>
+                        </span>
+                        <span class="mg-copy">
+                            <span class="mg-title">@(openShift ? "Checked in" : "Checked out")</span>
+                            <span class="mg-sub">Attendance on @item.AttendanceDate.ToString("dd MMM yyyy"). Check in @Clock(item.CheckinTime). Check out @Clock(item.CheckOutTime).</span>
+                        </span>
+                        <span class="mg-meta">
+                            <span class="mg-time">@When(item.AttendanceDate, item.CheckinTime)</span>
+                            <span class="mg-dot @(openShift ? "unread" : null)"></span>
+                        </span>
+                    </a>
+                }
+            }
+        </div>
+        @if (_items.Count == 0)
+        {
+            <p class="mg-empty">No records yet.</p>
+        }
+    }
+</div>
+
+@code {
+    private readonly List<AttendanceDto> _items = [];
+    private bool _loading = true;
+    private string? _error;
+    private AttendanceDto? _today;
+    private readonly List<PendingPunch> _pendingPunches = [];
+    private bool _pullArmed;
+    private double _pullStart;
+
+    private void PullStart(PointerEventArgs e) => _pullStart = e.ClientY;
+
+    private void PullMove(PointerEventArgs e) => _pullArmed = e.ClientY - _pullStart > 72;
+
+    private async Task PullEnd()
+    {
+        if (!_pullArmed)
+            return;
+        _pullArmed = false;
+        await LoadAsync();
+    }
+
+    private void OpenAttendance(Guid id) => Nav.NavigateTo($"/attendances/{id}");
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            await LoadPendingAsync();
+            var companyId = Auth.CurrentUser?.ActiveCompanyId ?? 0;
+            var officeId = Auth.CurrentUser?.ActiveOfficeId ?? 0;
+            var personId = Auth.CurrentUser?.PersonId ?? 0;
+            if (companyId <= 0 || officeId <= 0 || personId <= 0)
+                _error = "Sign in again so company, office, and person are stored in this session.";
+            var rows = await Api.GetListAsync();
+            rows = rows.Where(x => x.CompanyId == companyId && x.CompanyOfficeId == officeId && x.PersonId == personId).ToList();
+            _items.Clear();
+            _items.AddRange(rows);
+            _today = _items.FirstOrDefault(x => x.AttendanceDate.Date == DateTime.Today);
+        }
+        catch (Exception ex)
+        {
+            _error = _pendingPunches.Count > 0
+                ? "Offline: showing attendance events saved on this device."
+                : ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private IEnumerable<FeedGroup> AttendanceGroups
+    {
+        get
+        {
+            var order = new[] { "Today", "Yesterday", "This Week" };
+            return _items
+                .OrderByDescending(item => item.CheckinTime ?? item.AttendanceDate)
+                .GroupBy(item => Bucket(item.AttendanceDate))
+                .OrderBy(group =>
+                {
+                    var index = Array.IndexOf(order, group.Key);
+                    return index < 0 ? order.Length : index;
+                })
+                .Select(group => new FeedGroup(group.Key, group.ToList()));
+        }
+    }
+
+    private static string Bucket(DateTime date)
+    {
+        var day = date.Date;
+        if (day == DateTime.Today) return "Today";
+        if (day == DateTime.Today.AddDays(-1)) return "Yesterday";
+        if (day >= DateTime.Today.AddDays(-6)) return "This Week";
+        return day.ToString("MMMM yyyy");
+    }
+
+    private static string Clock(DateTime? value) => value?.ToString("HH:mm") ?? "-";
+
+    private static string When(DateTime date, DateTime? clock)
+    {
+        var time = clock ?? date;
+        if (date.Date == DateTime.Today)
+            return time.ToString("hh:mm tt");
+        if (date.Date == DateTime.Today.AddDays(-1))
+            return "Yesterday, " + time.ToString("hh:mm tt");
+        return time.ToString("dd MMM yyyy, hh:mm tt");
+    }
+
+    private sealed record FeedGroup(string Label, List<AttendanceDto> Items);
+    private sealed record PendingPunch(Guid EntityGuid, string Kind);
+    private bool _punching;
+
+    private bool HasPendingCheckIn => _pendingPunches.Any(x => x.Kind == "CheckIn");
+    private bool HasPendingCheckOut => _pendingPunches.Any(x => x.Kind == "CheckOut");
+
+    private async Task LoadPendingAsync()
+    {
+        _pendingPunches.Clear();
+        foreach (var operation in await OfflineStore.GetOutstandingAsync())
+        {
+            if (operation.EntityType != "Attendance")
+                continue;
+            try
+            {
+                var payload = System.Text.Json.JsonSerializer.Deserialize<AttendancePunchEvent>(
+                    operation.PayloadJson, new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+                if (payload is not null)
+                    _pendingPunches.Add(new PendingPunch(payload.AttendanceGuid, payload.Kind));
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                // A newer payload remains visible in the global sync status.
+            }
+        }
+    }
+
+    private async Task PunchAsync(bool checkIn)
+    {
+        _punching = true;
+        _error = null;
+        try
+        {
+            _error = "Opening camera...";
+            StateHasChanged();
+            await Task.Yield();
+            var companyId = Auth.CurrentUser?.ActiveCompanyId ?? 0;
+            var officeId = Auth.CurrentUser?.ActiveOfficeId ?? 0;
+            if (companyId <= 0 || officeId <= 0)
+            {
+                _error = "Sign in again so company and office are stored in this session.";
+                return;
+            }
+            var personId = Auth.CurrentUser?.PersonId ?? 0;
+            if (personId <= 0)
+            {
+                _error = "Sign in again so this session includes your person.";
+                return;
+            }
+            var photo = await Device.CapturePhotoAsync();
+            if (photo is null)
+            {
+                _error = "A photo is required.";
+                return;
+            }
+            _error = "Reading location...";
+            StateHasChanged();
+            var location = await Device.GetCurrentLocationAsync();
+            if (location is null)
+            {
+                _error = "A location is required.";
+                return;
+            }
+            await using var stream = await photo.OpenReadAsync();
+            var attendanceGuid = _today?.AttendanceGuid
+                ?? _pendingPunches.FirstOrDefault()?.EntityGuid
+                ?? Guid.NewGuid();
+            await OfflineQueue.EnqueuePunchAsync(checkIn, attendanceGuid, stream, photo.FileName, location);
+            _error = SyncCoordinator.IsOnline
+                ? "Attendance saved. Sync will start now."
+                : "Attendance saved securely and will sync when you are online.";
+            await LoadPendingAsync();
+            if (SyncCoordinator.IsOnline)
+                _ = SyncCoordinator.SyncNowAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _punching = false;
+        }
+    }
+}

@@ -1,0 +1,104 @@
+@page "/employees/{Id:guid}"
+@layout MobileShellLayout
+@using BamboeUp.Mobile.Modules.Services
+@using Shared.DataTransferObjects
+@inject EmployeeApi Api
+
+<div class="me-page">
+    <div class="mh-section-head">
+        <div class="me-head-row">
+            <div class="mh-section-title"><h2>Employee</h2></div>
+            <div class="me-head-actions">
+                <a class="me-refresh" href="/employees">Back</a>
+                <a class="me-new" href="@($"/employees/{Id}/edit")">Edit</a>
+            </div>
+        </div>
+        <p class="mh-section-sub">Master, then detail on this page</p>
+    </div>
+
+    @if (_loading)
+    {
+        <p class="me-status">Loading...</p>
+    }
+    else if (_employee is null)
+    {
+        <div class="me-card"><p class="me-empty">@_error ?? "Employee was not found."</p></div>
+    }
+    else
+    {
+        <div class="me-card">
+            <header class="me-card-top"><h3>@Show(_employee.PersonName)</h3></header>
+            <dl>
+                <div><dt>Employee No</dt><dd>@_employee.EmployeeNo</dd></div>
+                <div><dt>Hire Date</dt><dd>@_employee.HireDate.ToString("dd MMM yyyy")</dd></div>
+                <div><dt>Status</dt><dd>@Show(_employee.EmploymentStatusName)</dd></div>
+                <div><dt>Type</dt><dd>@Show(_employee.EmploymentTypeName)</dd></div>
+            </dl>
+        </div>
+        <h3 class="mh-section-title">Assignment</h3>
+        <div class="me-list">
+            @foreach (var item in _assignments)
+            {
+                <div class="me-card">
+                    <h3>@Show(item.PositionName)</h3>
+                    <p class="me-status">@Show(item.OrganizationUnitName)</p>
+                </div>
+            }
+            @if (_assignments.Count == 0)
+            {
+                <div class="me-card"><p class="me-empty">No assignment yet.</p></div>
+            }
+        </div>
+        <h3 class="mh-section-title">Contract</h3>
+        <div class="me-list">
+            @foreach (var item in _contracts)
+            {
+                <div class="me-card">
+                    <h3>@item.ContractNo</h3>
+                    <p class="me-status">@item.ContractStartDate.ToString("dd MMM yyyy")</p>
+                </div>
+            }
+            @if (_contracts.Count == 0)
+            {
+                <div class="me-card"><p class="me-empty">No contract yet.</p></div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private EmployeeDto? _employee;
+    private readonly List<EmployeeAssignmentDto> _assignments = [];
+    private readonly List<EmployeeContractDto> _contracts = [];
+    private bool _loading = true;
+    private string? _error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _error = null;
+        _assignments.Clear();
+        _contracts.Clear();
+        try
+        {
+            _employee = await Api.GetByIdAsync(Id);
+            if (_employee is not null)
+            {
+                _assignments.AddRange(await Api.GetAssignmentsAsync(Id));
+                _contracts.AddRange(await Api.GetContractsAsync(Id));
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static string Show(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
+}

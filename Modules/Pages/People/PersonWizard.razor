@@ -1,0 +1,209 @@
+@page "/people/onboard"
+@layout MobileShellLayout
+@using Microsoft.AspNetCore.Components.Forms
+@using BamboeUp.Mobile.Modules.Services
+@using BamboeUp.Mobile.Shell.Services
+@using Shared.DataTransferObjects
+@inject PersonApi Api
+@inject NavigationManager Nav
+
+<div class="me-page">
+    <div class="mh-section-head">
+        <div class="me-head-row">
+            <div class="mh-section-title"><h2>@_titles[_step - 1]</h2></div>
+            <a class="me-refresh" href="/forms">Form</a>
+        </div>
+        <p class="mh-section-sub">Mobile-03. Wizard. Step @_step of 6</p>
+    </div>
+
+    <div class="me-card me-form">
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <p class="me-warn">@_error</p>
+        }
+        @if (_step == 1)
+        {
+            <label class="me-label">First Name</label>
+            <InputText class="me-input" @bind-Value="_firstName" />
+            <label class="me-label">Last Name</label>
+            <InputText class="me-input" @bind-Value="_lastName" />
+            <label class="me-label">Birth Date</label>
+            <InputDate class="me-input" @bind-Value="_birthDate" />
+            <label class="me-label">Gender Id</label>
+            <InputNumber class="me-input" @bind-Value="_genderId" />
+            <label class="me-label">Religion Id</label>
+            <InputNumber class="me-input" @bind-Value="_religionId" />
+        }
+        else if (_step == 2)
+        {
+            <label class="me-label">Address</label>
+            <InputText class="me-input" @bind-Value="_address" />
+            <label class="me-label">Address Type Id</label>
+            <InputNumber class="me-input" @bind-Value="_addressTypeId" />
+            <label class="me-label">Country Id</label>
+            <InputNumber class="me-input" @bind-Value="_countryId" />
+            <label class="me-label">Province Id</label>
+            <InputNumber class="me-input" @bind-Value="_provinceId" />
+            <label class="me-label">City Id</label>
+            <InputNumber class="me-input" @bind-Value="_cityId" />
+        }
+        else if (_step == 3)
+        {
+            <label class="me-label">Contact</label>
+            <InputText class="me-input" @bind-Value="_contact" />
+            <label class="me-label">Contact Type Id</label>
+            <InputNumber class="me-input" @bind-Value="_contactTypeId" />
+        }
+        else if (_step == 4)
+        {
+            <label class="me-label">Institution</label>
+            <InputText class="me-input" @bind-Value="_institution" />
+            <label class="me-label">Education Level Id</label>
+            <InputNumber class="me-input" @bind-Value="_educationLevelId" />
+        }
+        else if (_step == 5)
+        {
+            <label class="me-label">Emergency Contact</label>
+            <InputText class="me-input" @bind-Value="_emergencyName" />
+            <label class="me-label">Phone</label>
+            <InputText class="me-input" @bind-Value="_emergencyPhone" />
+            <label class="me-label">Relationship Id</label>
+            <InputNumber class="me-input" @bind-Value="_relationshipId" />
+        }
+        else
+        {
+            <label class="me-label">Identification</label>
+            <InputText class="me-input" @bind-Value="_identification" />
+            <label class="me-label">Identification Type Id</label>
+            <InputNumber class="me-input" @bind-Value="_identificationTypeId" />
+        }
+
+        <div class="me-head-actions">
+            @if (_step > 1)
+            {
+                <button type="button" class="me-refresh" @onclick="Back" disabled="@_saving">Back</button>
+            }
+            @if (_step < 6)
+            {
+                <button type="button" class="me-save" @onclick="Next">Next</button>
+            }
+            else
+            {
+                <button type="button" class="me-save" @onclick="SaveAsync" disabled="@_saving">Save</button>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private static readonly string[] _titles = ["Profile", "Address", "Contact", "Education", "Emergency Contact", "Identification"];
+    private int _step = 1;
+    private bool _saving;
+    private string? _error;
+    private string _firstName = "";
+    private string? _lastName;
+    private DateTime _birthDate = DateTime.Today;
+    private long _genderId;
+    private long _religionId;
+    private string _address = "";
+    private long _addressTypeId;
+    private long _countryId;
+    private long _provinceId;
+    private long _cityId;
+    private string _contact = "";
+    private long _contactTypeId;
+    private string _institution = "";
+    private long _educationLevelId;
+    private string _emergencyName = "";
+    private string? _emergencyPhone;
+    private long _relationshipId;
+    private string _identification = "";
+    private long _identificationTypeId;
+
+    private void Next()
+    {
+        if (!Valid())
+            return;
+        _error = null;
+        _step++;
+    }
+
+    private void Back()
+    {
+        _error = null;
+        if (_step > 1)
+            _step--;
+    }
+
+    private bool Valid()
+    {
+        _error = _step switch
+        {
+            1 when string.IsNullOrWhiteSpace(_firstName) => "First Name is required.",
+            2 when string.IsNullOrWhiteSpace(_address) => "Address is required.",
+            3 when string.IsNullOrWhiteSpace(_contact) => "Contact is required.",
+            4 when string.IsNullOrWhiteSpace(_institution) => "Institution is required.",
+            5 when string.IsNullOrWhiteSpace(_emergencyName) => "Emergency Contact is required.",
+            6 when string.IsNullOrWhiteSpace(_identification) => "Identification is required.",
+            _ => null
+        };
+        return _error is null;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (!Valid())
+            return;
+        _saving = true;
+        _error = null;
+        try
+        {
+            await Api.OnboardAsync(new PersonQuickOnboardDto
+            {
+                FirstName = _firstName.Trim(),
+                LastName = string.IsNullOrWhiteSpace(_lastName) ? null : _lastName.Trim(),
+                BirthDate = _birthDate,
+                SrGender = _genderId,
+                SrReligion = _religionId,
+                Address = new PersonAddressForCreationDto
+                {
+                    Address = _address.Trim(),
+                    SrAddressType = _addressTypeId,
+                    CountryId = _countryId,
+                    ProvinceId = _provinceId,
+                    CityId = _cityId
+                },
+                Contact = new PersonContactForCreationDto
+                {
+                    ContactValue = _contact.Trim(),
+                    SrContactType = _contactTypeId
+                },
+                Education = new PersonEducationForCreationDto
+                {
+                    InstitutionName = _institution.Trim(),
+                    SrEducationLevel = _educationLevelId
+                },
+                EmergencyContact = new PersonEmergencyContactForCreationDto
+                {
+                    ContactName = _emergencyName.Trim(),
+                    Phone = string.IsNullOrWhiteSpace(_emergencyPhone) ? null : _emergencyPhone.Trim(),
+                    SrRelationship = _relationshipId
+                },
+                Identification = new PersonIdentificationForCreationDto
+                {
+                    IdentificationValue = _identification.Trim(),
+                    SrIdentificationType = _identificationTypeId
+                }
+            });
+            Nav.NavigateTo("/people");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

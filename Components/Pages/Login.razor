@@ -1,0 +1,450 @@
+@page "/login"
+@layout BamboeUp.Mobile.Components.Layout.AuthLayout
+@using BamboeUp.Mobile.Shell.Device
+@using BamboeUp.Mobile.Shell.Services
+@using global::Shared.DataTransferObjects
+@inject MobileAuthService Auth
+@inject IDeviceServices Device
+@inject NavigationManager Nav
+
+<div class="ml-screen">
+    <div class="ml-inner">
+        <header class="ml-brand">
+            <img class="ml-logo" src="images/bamboo-logo.png" alt="" width="78" height="78" />
+            <div class="ml-wordmark">
+                <span class="ml-word-bamboe">Bamboe</span><span class="ml-word-up">Up</span>
+            </div>
+            <div class="ml-word-mobile">.Mobile</div>
+        </header>
+
+        <div class="ml-welcome">
+            <h1>Welcome Back</h1>
+            <p>Sign in to continue to BamboeUp.Mobile</p>
+        </div>
+
+        <EditForm Model="_model" OnValidSubmit="SubmitAsync" class="ml-form">
+            <div class="ml-field">
+                <label class="ml-label">User Name</label>
+                <div class="ml-input-wrap">
+                    <span class="ml-ico" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7">
+                            <circle cx="12" cy="8" r="3.5"/><path d="M5.5 19.5c1.8-3.2 4.2-4.5 6.5-4.5s4.7 1.3 6.5 4.5"/>
+                        </svg>
+                    </span>
+                    <input @bind="_model.Username"
+                           class="ml-input"
+                           autocomplete="username"
+                           placeholder="Enter your user name" />
+                </div>
+            </div>
+
+            <div class="ml-field">
+                <label class="ml-label">Password</label>
+                <div class="ml-input-wrap">
+                    <span class="ml-ico" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7">
+                            <rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>
+                        </svg>
+                    </span>
+                    <input @bind="_model.Password"
+                           type="@(_showPassword ? "text" : "password")"
+                           class="ml-input ml-input-pwd"
+                           autocomplete="current-password"
+                           placeholder="Enter your password" />
+                    <button type="button" class="ml-eye" @onclick="() => _showPassword = !_showPassword" aria-label="Toggle password">
+                        @if (_showPassword)
+                        {
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7">
+                                <path d="M3 3l18 18M10.6 10.6A3 3 0 0 0 13.4 13.4M9.9 5.1A9.8 9.8 0 0 1 12 5c5 0 9.3 3.1 11 7.5a11.5 11.5 0 0 1-4.2 5.1M6.1 6.1A11.4 11.4 0 0 0 1 12.5C2.7 16.9 7 20 12 20c1.4 0 2.7-.3 3.9-.7"/>
+                            </svg>
+                        }
+                        else
+                        {
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7">
+                                <path d="M1 12.5C2.7 8.1 7 5 12 5s9.3 3.1 11 7.5C21.3 16.9 17 20 12 20S2.7 16.9 1 12.5z"/><circle cx="12" cy="12.5" r="3"/>
+                            </svg>
+                        }
+                    </button>
+                </div>
+            </div>
+
+            <button type="button" class="ml-scope-toggle" disabled="@_busy" @onclick="ToggleScopeCombosAsync">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+                    <polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>
+                </svg>
+                <span>@(_showScopeCombos ? "Hide Scope Selection" : "Specify Company & Office Scope")</span>
+            </button>
+
+            @if (_showScopeCombos)
+            {
+                <div class="ml-scope-block">
+                    <div class="ml-field">
+                        <label class="ml-label-sub">Company</label>
+                        <div class="ml-input-wrap ml-select-wrap">
+                            <span class="ml-ico" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7">
+                                    <path d="M4 20V6l8-3 8 3v14"/><path d="M9 20v-6h6v6M9 10h.01M12 10h.01M15 10h.01M9 14h.01M15 14h.01"/>
+                                </svg>
+                            </span>
+                            <select class="ml-input ml-select"
+                                    value="@(_selectedCompanyId?.ToString() ?? "")"
+                                    @onchange="OnCompanySelectChanged"
+                                    disabled="@(_busy || _scopesLoading)">
+                                <option value="">@(_scopesLoading ? "Loading…" : "Select company")</option>
+                                @foreach (var c in _companies)
+                                {
+                                    <option value="@c.CompanyId">@c.CompanyName</option>
+                                }
+                            </select>
+                            <span class="ml-chevron" aria-hidden="true">
+                                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M6 9l6 6 6-6"/>
+                                </svg>
+                            </span>
+                        </div>
+                    </div>
+
+                    @if (_offices.Count > 0)
+                    {
+                        <div class="ml-field">
+                            <label class="ml-label-sub">Office</label>
+                            <div class="ml-input-wrap ml-select-wrap">
+                                <span class="ml-ico" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7">
+                                        <path d="M12 21s7-5.2 7-11a7 7 0 1 0-14 0c0 5.8 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/>
+                                    </svg>
+                                </span>
+                                <select class="ml-input ml-select"
+                                        value="@(_selectedOfficeId?.ToString() ?? "")"
+                                        @onchange="OnOfficeSelectChanged"
+                                        disabled="@_busy">
+                                    <option value="">Select office</option>
+                                    @foreach (var o in _offices)
+                                    {
+                                        <option value="@o.OfficeId">@o.OfficeName</option>
+                                    }
+                                </select>
+                                <span class="ml-chevron" aria-hidden="true">
+                                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M6 9l6 6 6-6"/>
+                                    </svg>
+                                </span>
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+
+            <div class="ml-row-actions">
+                <label class="ml-remember">
+                    <input type="checkbox" @bind="_rememberMe" />
+                    <span>Remember me</span>
+                </label>
+                <button type="button" class="ml-forgot" @onclick="OnForgotPassword">Forgot Password?</button>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_error))
+            {
+                <div class="ml-error">@_error</div>
+            }
+            @if (!string.IsNullOrEmpty(_info))
+            {
+                <div class="ml-info">@_info</div>
+            }
+
+            <button class="ml-btn-login" type="submit" disabled="@_busy">
+                @(_busy ? "LOGGING IN…" : "LOGIN")
+            </button>
+        </EditForm>
+
+        <div class="ml-or">
+            <span class="ml-or-line"></span>
+            <span class="ml-or-text">OR</span>
+            <span class="ml-or-line"></span>
+        </div>
+
+        <button type="button" class="ml-btn-admin" disabled="@_busy" @onclick="DevLoginAsync">
+            <span class="ml-admin-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.7">
+                    <path d="M12 3l8 3v5c0 5-3.5 8.5-8 10-4.5-1.5-8-5-8-10V6l8-3z"/>
+                    <path d="M9.5 12.2l1.8 1.8 3.7-3.8"/>
+                </svg>
+            </span>
+            LOGIN AS ADMIN
+        </button>
+
+        <button type="button" class="ml-btn-bio" disabled="@_busy" @onclick="BiometricUnlockAsync">
+            Unlock with fingerprint / Face ID
+        </button>
+    </div>
+
+    <div class="ml-decor" aria-hidden="true">
+        <img class="ml-wave" src="images/login-wave.svg" alt="" />
+        <img class="ml-watermark" src="images/bamboo-watermark.svg" alt="" />
+    </div>
+</div>
+
+@code {
+    private const string RememberKey = "bamboeup_mobile_remember_user";
+    private readonly LoginModel _model = new();
+    private string? _error;
+    private string? _info;
+    private bool _busy;
+    private bool _showPassword;
+    private bool _rememberMe;
+    private bool _showScopeCombos;
+    private bool _scopesLoading;
+    private string? _scopedFor;
+
+    private List<LoginScopeDto> _scopes = new();
+    private List<(long CompanyId, string CompanyName)> _companies = new();
+    private List<(long OfficeId, string OfficeName)> _offices = new();
+    private long? _selectedCompanyId;
+    private long? _selectedOfficeId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Auth.InitializeAsync();
+        if (Auth.IsOnlineAuthenticated)
+        {
+            Nav.NavigateTo("/", replace: true);
+            return;
+        }
+
+        try
+        {
+            var remembered = Preferences.Default.Get(RememberKey, string.Empty);
+            if (!string.IsNullOrWhiteSpace(remembered))
+            {
+                _model.Username = remembered;
+                _rememberMe = true;
+            }
+        }
+        catch { /* Preferences may fail on some hosts */ }
+    }
+
+    private async Task ToggleScopeCombosAsync()
+    {
+        if (_showScopeCombos)
+        {
+            _showScopeCombos = false;
+            ClearScopes();
+            _error = null;
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_model.Username) || string.IsNullOrWhiteSpace(_model.Password))
+        {
+            _error = "Enter user name and password first.";
+            return;
+        }
+
+        _showScopeCombos = true;
+        _error = null;
+        await LoadScopesAsync();
+    }
+
+    private async Task LoadScopesAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_model.Username) || string.IsNullOrWhiteSpace(_model.Password))
+            return;
+
+        _scopesLoading = true;
+        StateHasChanged();
+        try
+        {
+            var preview = await Auth.GetLoginScopesAsync(_model.Username.Trim(), _model.Password);
+            if (preview is null)
+            {
+                _showScopeCombos = false;
+                ClearScopes();
+                _error = "Invalid user name or password.";
+                return;
+            }
+
+            _scopedFor = $"{_model.Username.Trim()}|{_model.Password}";
+            _scopes = preview.AvailableScopes?.ToList() ?? new();
+            _companies = _scopes
+                .GroupBy(s => s.CompanyId)
+                .Select(g => (CompanyId: g.Key, CompanyName: g.First().CompanyName ?? $"Company {g.Key}"))
+                .OrderBy(c => c.CompanyName)
+                .ToList();
+
+            _selectedCompanyId = preview.DefaultCompanyId;
+            _selectedOfficeId = preview.DefaultOfficeId;
+            if (_selectedCompanyId.HasValue)
+                PopulateOffices(_selectedCompanyId.Value);
+            else
+                _offices = new();
+        }
+        catch (Exception ex)
+        {
+            _showScopeCombos = false;
+            ClearScopes();
+            _error = FriendlyError(ex.Message);
+        }
+        finally
+        {
+            _scopesLoading = false;
+        }
+    }
+
+    private void ClearScopes()
+    {
+        _scopedFor = null;
+        _scopes = new();
+        _companies = new();
+        _offices = new();
+        _selectedCompanyId = null;
+        _selectedOfficeId = null;
+    }
+
+    private void OnCompanySelectChanged(ChangeEventArgs e)
+    {
+        _selectedCompanyId = long.TryParse(e.Value?.ToString(), out var id) ? id : null;
+        OnCompanyChanged();
+    }
+
+    private void OnOfficeSelectChanged(ChangeEventArgs e)
+    {
+        _selectedOfficeId = long.TryParse(e.Value?.ToString(), out var id) ? id : null;
+    }
+
+    private void OnCompanyChanged()
+    {
+        if (_selectedCompanyId is long id)
+        {
+            PopulateOffices(id);
+            if (_offices.Count == 1)
+                _selectedOfficeId = _offices[0].OfficeId;
+            else if (_offices.All(o => o.OfficeId != _selectedOfficeId))
+                _selectedOfficeId = null;
+        }
+        else
+        {
+            _offices = new();
+            _selectedOfficeId = null;
+        }
+    }
+
+    private void PopulateOffices(long companyId)
+    {
+        _offices = _scopes
+            .Where(s => s.CompanyId == companyId && s.OfficeId.HasValue)
+            .Select(s => (OfficeId: s.OfficeId!.Value, OfficeName: s.OfficeName ?? s.OfficeId.ToString()!))
+            .DistinctBy(o => o.OfficeId)
+            .OrderBy(o => o.OfficeName)
+            .ToList();
+    }
+
+    private async Task SubmitAsync()
+    {
+        _error = null;
+        _info = null;
+        _busy = true;
+        try
+        {
+            await Auth.LoginAsync(
+                _model.Username.Trim(),
+                _model.Password,
+                _selectedCompanyId,
+                _selectedOfficeId);
+            await EnrollOfflineAsync();
+
+            try
+            {
+                if (_rememberMe)
+                    Preferences.Default.Set(RememberKey, _model.Username.Trim());
+                else
+                    Preferences.Default.Remove(RememberKey);
+            }
+            catch { /* ignore */ }
+
+            Nav.NavigateTo("/", replace: true);
+        }
+        catch (Exception ex)
+        {
+            _error = FriendlyError(ex.Message);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task DevLoginAsync()
+    {
+        _error = null;
+        _info = null;
+        _busy = true;
+        try
+        {
+            await Auth.DevLoginAsync();
+            await EnrollOfflineAsync();
+            Nav.NavigateTo("/", replace: true);
+        }
+        catch (Exception ex)
+        {
+            _error = FriendlyError(ex.Message);
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task BiometricUnlockAsync()
+    {
+        _error = null;
+        _info = null;
+        await Auth.InitializeAsync();
+        var biometric = await Device.AuthenticateBiometricAsync("Unlock Physical Inventory Count");
+        if (!biometric)
+        {
+            _error = "Biometric failed or is unavailable on this device.";
+            return;
+        }
+
+        if (await Auth.TryUnlockOfflineAsync())
+        {
+            Nav.NavigateTo("/", replace: true);
+            return;
+        }
+
+        _error = Auth.OfflineUnlockFailureReason();
+    }
+
+    private async Task EnrollOfflineAsync()
+    {
+        try
+        {
+            await Auth.RefreshPermitAsync(await Device.GetDeviceGuidAsync());
+            await Device.AuthenticateBiometricAsync("Enroll fingerprint / Face ID for offline stock count");
+        }
+        catch
+        {
+            // Permit enrollment needs network; counting still works after a later successful refresh.
+        }
+    }
+
+    private void OnForgotPassword()
+    {
+        _info = "Contact your administrator to reset the password.";
+        _error = null;
+    }
+
+    private static string FriendlyError(string raw)
+    {
+        if (raw.Contains("401", StringComparison.Ordinal) || raw.Contains("Unauthorized", StringComparison.OrdinalIgnoreCase))
+            return "Invalid user name or password.";
+        if (raw.Contains("404", StringComparison.Ordinal))
+            return "Admin login is only available when the API runs in Development.";
+        return raw.Length > 180 ? raw[..180] + "…" : raw;
+    }
+
+    private sealed class LoginModel
+    {
+        public string Username { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+    }
+}

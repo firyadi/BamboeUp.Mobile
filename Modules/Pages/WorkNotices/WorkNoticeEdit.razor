@@ -1,0 +1,158 @@
+@page "/work-notices/new"
+@page "/work-notices/{Id:guid}"
+@layout MobileShellLayout
+@using Microsoft.AspNetCore.Components.Forms
+@using BamboeUp.Mobile.Modules.Services
+@using BamboeUp.Mobile.Shell.Services
+@using Shared.DataTransferObjects
+@inject WorkNoticeApi Api
+@inject MobileAuthService Auth
+@inject NavigationManager Nav
+
+<div class="me-page">
+    <div class="mh-section-head">
+        <div class="me-head-row">
+            <div class="mh-section-title"><h2>@(IsNew ? "New Work Notice" : "Work Notice")</h2></div>
+            <a class="me-refresh" href="/work-notices">Back</a>
+        </div>
+        <p class="mh-section-sub">Mobile-01. 1 Table</p>
+    </div>
+
+    @if (_loading)
+    {
+        <p class="me-status">Loading...</p>
+    }
+    else if (!IsNew && _missing)
+    {
+        <div class="me-card"><p class="me-empty">Work notice was not found.</p></div>
+    }
+    else
+    {
+        <div class="me-card me-form">
+            @if (!string.IsNullOrWhiteSpace(_error))
+            {
+                <p class="me-warn">@_error</p>
+            }
+            <label class="me-label" for="notice-code">Work Notice Code</label>
+            <InputText id="notice-code" class="me-input" @bind-Value="_form.WorkNoticeCode" />
+            <label class="me-label" for="notice-name">Work Notice Name</label>
+            <InputText id="notice-name" class="me-input" @bind-Value="_form.WorkNoticeName" />
+            <label class="me-label" for="notice-date">Work Notice Date</label>
+            <InputDate id="notice-date" class="me-input" @bind-Value="_form.WorkNoticeDate" />
+            <label class="me-label" for="notice-edit">Edit Able</label>
+            <InputCheckbox id="notice-edit" @bind-Value="_form.IsEditAble" />
+            <label class="me-label" for="notice-note">Note</label>
+            <InputText id="notice-note" class="me-input" @bind-Value="_form.Note" />
+            <button type="button" class="me-save" @onclick="SaveAsync" disabled="@_saving">Save</button>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private bool IsNew => Id == Guid.Empty;
+    private bool _loading = true;
+    private bool _saving;
+    private bool _missing;
+    private string? _error;
+    private readonly NoticeForm _form = new();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _error = null;
+        _missing = false;
+        if (IsNew)
+        {
+            _loading = false;
+            return;
+        }
+
+        try
+        {
+            var item = await Api.GetByIdAsync(Id);
+            if (item is null)
+            {
+                _missing = true;
+                return;
+            }
+
+            _form.WorkNoticeCode = item.WorkNoticeCode;
+            _form.WorkNoticeName = item.WorkNoticeName;
+            _form.WorkNoticeDate = item.WorkNoticeDate;
+            _form.IsEditAble = item.IsEditAble;
+            _form.Note = item.Note;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task SaveAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_form.WorkNoticeCode) || string.IsNullOrWhiteSpace(_form.WorkNoticeName))
+        {
+            _error = "Work Notice Code and Work Notice Name are required.";
+            return;
+        }
+
+        _saving = true;
+        _error = null;
+        try
+        {
+            var userId = Auth.CurrentUser?.UserId ?? 0;
+            if (IsNew)
+            {
+                await Api.CreateAsync(new WorkNoticeForCreationDto
+                {
+                    WorkNoticeCode = _form.WorkNoticeCode.Trim(),
+                    WorkNoticeName = _form.WorkNoticeName.Trim(),
+                    WorkNoticeDate = _form.WorkNoticeDate,
+                    IsEditAble = _form.IsEditAble,
+                    Note = Blank(_form.Note),
+                    CreatedById = userId
+                });
+            }
+            else
+            {
+                await Api.UpdateAsync(Id, new WorkNoticeForUpdateDto
+                {
+                    WorkNoticeCode = _form.WorkNoticeCode.Trim(),
+                    WorkNoticeName = _form.WorkNoticeName.Trim(),
+                    WorkNoticeDate = _form.WorkNoticeDate,
+                    IsEditAble = _form.IsEditAble,
+                    Note = Blank(_form.Note),
+                    UpdatedById = userId
+                });
+            }
+
+            Nav.NavigateTo("/work-notices");
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private static string? Blank(string? value) =>
+        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private sealed class NoticeForm
+    {
+        public string WorkNoticeCode { get; set; } = "";
+        public string WorkNoticeName { get; set; } = "";
+        public DateTime WorkNoticeDate { get; set; } = DateTime.Today;
+        public bool IsEditAble { get; set; }
+        public string? Note { get; set; }
+    }
+}

@@ -1,0 +1,79 @@
+@page "/people/{Id:guid}"
+@layout MobileShellLayout
+@using BamboeUp.Mobile.Modules.Services
+@using Shared.DataTransferObjects
+@inject PersonApi Api
+
+<div class="me-page">
+    <div class="mh-section-head">
+        <div class="me-head-row">
+            <div class="mh-section-title"><h2>Person</h2></div>
+            <div class="me-head-actions">
+                <a class="me-refresh" href="/people">Back</a>
+                <a class="me-new" href="@($"/people/{Id}/edit")">Edit</a>
+            </div>
+        </div>
+        <p class="mh-section-sub">Header, then each detail</p>
+    </div>
+
+    @if (_loading)
+    {
+        <p class="me-status">Loading...</p>
+    }
+    else if (_person is null)
+    {
+        <div class="me-card"><p class="me-empty">@_error ?? "Person was not found."</p></div>
+    }
+    else
+    {
+        <div class="me-card">
+            <header class="me-card-top"><h3>@Name(_person)</h3></header>
+            <dl>
+                <div><dt>Birth Date</dt><dd>@_person.BirthDate.ToString("dd MMM yyyy")</dd></div>
+                <div><dt>Place of Birth</dt><dd>@Show(_person.PlaceofBirth)</dd></div>
+                <div><dt>National Id</dt><dd>@Show(_person.NationalIdNo)</dd></div>
+                <div><dt>Gender</dt><dd>@Show(_person.GenderName)</dd></div>
+            </dl>
+        </div>
+        <div class="me-list">
+            <a class="me-card" href="@($"/people/{Id}/section/address")"><h3>Address</h3></a>
+            <a class="me-card" href="@($"/people/{Id}/section/contact")"><h3>Contact</h3></a>
+            <a class="me-card" href="@($"/people/{Id}/section/education")"><h3>Education</h3></a>
+            <a class="me-card" href="@($"/people/{Id}/section/emergency")"><h3>Emergency Contact</h3></a>
+            <a class="me-card" href="@($"/people/{Id}/section/identification")"><h3>Identification</h3></a>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public Guid Id { get; set; }
+
+    private PersonDto? _person;
+    private bool _loading = true;
+    private string? _error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            _person = await Api.GetByIdAsync(Id);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static string Name(PersonDto item) =>
+        string.IsNullOrWhiteSpace(item.PersonName)
+            ? string.Join(" ", new[] { item.FirstName, item.MiddleName, item.LastName }.Where(part => !string.IsNullOrWhiteSpace(part)))
+            : item.PersonName;
+
+    private static string Show(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
+}

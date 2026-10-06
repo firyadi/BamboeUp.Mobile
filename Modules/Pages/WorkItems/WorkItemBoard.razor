@@ -1,0 +1,99 @@
+@page "/work-items"
+@layout MobileShellLayout
+@using BamboeUp.Mobile.Modules.Services
+@using Shared.DataTransferObjects
+@inject WorkItemApi Api
+
+<div class="me-page">
+    <div class="mh-section-head">
+        <div class="me-head-row">
+            <div class="mh-section-title"><h2>Work Item</h2></div>
+            <div class="me-head-actions">
+                <a class="me-refresh" href="/forms">Form</a>
+                <a class="me-new" href="/work-items/new">New</a>
+                <button type="button" class="me-refresh" @onclick="LoadAsync" disabled="@_loading">Refresh</button>
+            </div>
+        </div>
+        <p class="mh-section-sub">Mobile-07. Kanban</p>
+    </div>
+
+    @if (_loading)
+    {
+        <p class="me-status">Loading...</p>
+    }
+    else
+    {
+        @if (!string.IsNullOrWhiteSpace(_error))
+        {
+            <p class="me-warn">@_error</p>
+        }
+        @foreach (var column in _columns.Where(item => item.IsActive).OrderBy(item => item.Order))
+        {
+            var cards = _cards.Where(item => item.StatusCode.Equals(column.Code, StringComparison.OrdinalIgnoreCase)).ToList();
+            <section>
+                <div class="me-head-row">
+                    <h3 class="mh-section-title">@column.Name</h3>
+                    <span class="me-status">@cards.Count</span>
+                </div>
+                <div class="me-list">
+                    @foreach (var card in cards)
+                    {
+                        <a class="me-card" href="@($"/work-items/{card.CardGuid}")">
+                            <header class="me-card-top"><h3>@card.Title</h3></header>
+                            <dl>
+                                <div><dt>Code</dt><dd>@Show(card.Code)</dd></div>
+                                <div><dt>Owner</dt><dd>@Show(card.Owner)</dd></div>
+                                <div><dt>Priority</dt><dd>@Show(card.Priority)</dd></div>
+                            </dl>
+                        </a>
+                    }
+                    @if (cards.Count == 0)
+                    {
+                        <div class="me-card"><p class="me-empty">No items.</p></div>
+                    }
+                </div>
+            </section>
+        }
+    }
+</div>
+
+@code {
+    private static readonly KanbanColumnDto[] DefaultColumns =
+    [
+        new() { Code = "DRAFT", Name = "Draft", Order = 1, IsActive = true },
+        new() { Code = "IN_PROGRESS", Name = "In Progress", Order = 2, IsActive = true },
+        new() { Code = "REVIEW", Name = "Review", Order = 3, IsActive = true },
+        new() { Code = "DONE", Name = "Done", Order = 4, IsActive = true },
+        new() { Code = "ARCHIVED", Name = "Archived", Order = 5, IsActive = true }
+    ];
+
+    private List<KanbanColumnDto> _columns = [];
+    private readonly List<KanbanCardDto> _cards = [];
+    private bool _loading = true;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _error = null;
+        try
+        {
+            var board = await Api.GetBoardAsync();
+            _columns = board.Columns.Count > 0 ? board.Columns : [.. DefaultColumns];
+            _cards.Clear();
+            _cards.AddRange(board.Cards);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private static string Show(string? value) => string.IsNullOrWhiteSpace(value) ? "-" : value;
+}
